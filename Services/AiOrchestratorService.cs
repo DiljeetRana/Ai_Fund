@@ -75,7 +75,45 @@ public class AiOrchestratorService : IAiOrchestratorService
             // 9. Build context
             var context = BuildContext(topMatches);
 
-            // 10. For simple definitions, return direct answer
+            // 10. For high confidence matches, return direct answer (skip LLM)
+            if (intent == "GENERAL" && topMatches[0].Score > 0.85)
+            {
+                var directAnswer = topMatches[0].Data.Answer;
+                
+                // Save to chat history
+                await _repository.SaveChatHistoryAsync(new Models.ChatHistory
+                {
+                    UserId = userId,
+                    Role = "Assistant",
+                    Message = directAnswer,
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                // Save AI log
+                await _repository.SaveAiLogAsync(new Models.AiLog
+                {
+                    UserId = userId,
+                    Query = query,
+                    Response = directAnswer,
+                    ConfidenceScore = topMatches[0].Score,
+                    Intent = intent,
+                    Source = "Database",
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                var dbResponse = CreateResponse(directAnswer, "Database", topMatches[0].Score, intent);
+                
+                // Cache the response
+                var dbCacheOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+                };
+                CacheExtensions.Set(_cache, cacheKey, dbResponse, dbCacheOptions);
+                
+                return dbResponse;
+            }
+
+            // 11. For simple definitions with high score, return direct answer
             if (intent == "DEFINITION" && topMatches[0].Score > 0.8)
             {
                 var directAnswer = topMatches[0].Data.Answer;
@@ -109,6 +147,9 @@ public class AiOrchestratorService : IAiOrchestratorService
             });
             
             var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory);
+
+            // Clean response
+            aiResponse = CleanResponse(aiResponse);
 
             // 12. Apply guardrails
             var guardedResponse = ApplyGuardrails(aiResponse);
@@ -200,7 +241,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                     return (Data: (KnowledgeData?)null, Score: 0.0);
                 }
             })
-            .Where(x => x.Data != null && x.Score > 0.7)
+            .Where(x => x.Data != null && x.Score > 0.65)
             .OrderByDescending(x => x.Score)
             .Take(3)
             .ToList();
@@ -229,6 +270,27 @@ public class AiOrchestratorService : IAiOrchestratorService
         }
 
         return null;
+    }
+
+    private string CleanResponse(string response)
+    {
+        // Fix common LLM mistakes
+        response = response.Replace("SIPI", "SIP");
+        response = response.Replace("sipi", "SIP");
+        
+        // Remove unwanted advice phrases
+        if (response.Contains("banker", StringComparison.OrdinalIgnoreCase) || 
+            response.Contains("advisor", StringComparison.OrdinalIgnoreCase))
+        {
+            // Remove sentences containing these words
+            var sentences = response.Split('.').Where(s => 
+                !s.Contains("banker", StringComparison.OrdinalIgnoreCase) && 
+                !s.Contains("advisor", StringComparison.OrdinalIgnoreCase)
+            );
+            response = string.Join(".", sentences).Trim();
+        }
+        
+        return response;
     }
 
     private ChatResponse CreateResponse(string answer, string source, double confidence, string intent)

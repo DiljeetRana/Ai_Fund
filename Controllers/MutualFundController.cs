@@ -15,7 +15,7 @@ public class MutualFundController : ControllerBase
     }
 
     [HttpGet("ask")]
-    public async Task<IActionResult> Ask([FromQuery] string query, [FromQuery] string userId = "anonymous")
+    public async Task<IActionResult> Ask([FromQuery] string query, [FromQuery] string userId)
     {
         var response = await _aiService.ProcessQueryAsync(query, userId);
         return Ok(response);
