@@ -16,6 +16,10 @@ builder.Services.AddScoped<IMutualFundRepository, MutualFundRepository>();
 builder.Services.AddScoped<IMutualFundService, MutualFundService>();
 builder.Services.AddSingleton<IEmbeddingService, NomicEmbeddingService>();
 builder.Services.AddSingleton<ILLMService, OllamaLLMService>();
+builder.Services.AddScoped<IAiOrchestratorService, AiOrchestratorService>();
+
+// Add memory cache
+builder.Services.AddMemoryCache();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

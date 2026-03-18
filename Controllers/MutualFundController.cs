@@ -7,17 +7,17 @@ namespace Ai_Fund.Controllers;
 [Route("api/[controller]")]
 public class MutualFundController : ControllerBase
 {
-    private readonly IMutualFundService _service;
+    private readonly IAiOrchestratorService _aiService;
 
-    public MutualFundController(IMutualFundService service)
+    public MutualFundController(IAiOrchestratorService aiService)
     {
-        _service = service;
+        _aiService = aiService;
     }
 
     [HttpGet("ask")]
-    public async Task<IActionResult> Ask([FromQuery] string query)
+    public async Task<IActionResult> Ask([FromQuery] string query, [FromQuery] string userId = "anonymous")
     {
-        var result = await _service.GetAIAnswerAsync(query);
-        return Ok(result);
+        var response = await _aiService.ProcessQueryAsync(query, userId);
+        return Ok(response);
     }
 }
