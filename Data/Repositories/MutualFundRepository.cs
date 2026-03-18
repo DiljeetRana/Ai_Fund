@@ -21,7 +21,7 @@ public class MutualFundRepository : IMutualFundRepository
 
         using (SqlConnection conn = new SqlConnection(_connectionString))
         {
-            using (SqlCommand cmd = new SqlCommand("SELECT Id, Question, Answer, Embedding FROM MutualFundKnowledge", conn))
+            using (SqlCommand cmd = new SqlCommand("SELECT Id, Question, Answer, Embedding FROM MutualFundKnowledge WHERE IsActive = 1", conn))
             {
                 await conn.OpenAsync();
                 using (var reader = await cmd.ExecuteReaderAsync())
@@ -132,6 +132,46 @@ public class MutualFundRepository : IMutualFundRepository
                 cmd.Parameters.AddWithValue("@Source", aiLog.Source ?? string.Empty);
                 cmd.Parameters.AddWithValue("@CreatedDate", aiLog.CreatedDate);
 
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    public async Task DeactivateKnowledgeAsync(int id)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            using (SqlCommand cmd = new SqlCommand("UPDATE MutualFundKnowledge SET IsActive = 0 WHERE Id = @Id", conn))
+            {
+                cmd.Parameters.AddWithValue("@Id", id);
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    public async Task ActivateKnowledgeAsync(int id)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            using (SqlCommand cmd = new SqlCommand("UPDATE MutualFundKnowledge SET IsActive = 1 WHERE Id = @Id", conn))
+            {
+                cmd.Parameters.AddWithValue("@Id", id);
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    public async Task UpdateKnowledgeVersionAsync(int id, int version)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            using (SqlCommand cmd = new SqlCommand("UPDATE MutualFundKnowledge SET Version = @Version WHERE Id = @Id", conn))
+            {
+                cmd.Parameters.AddWithValue("@Id", id);
+                cmd.Parameters.AddWithValue("@Version", version);
                 await conn.OpenAsync();
                 await cmd.ExecuteNonQueryAsync();
             }

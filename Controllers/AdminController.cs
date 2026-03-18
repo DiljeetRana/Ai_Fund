@@ -84,4 +84,25 @@ public class AdminController : ControllerBase
             Suggestion = "Query AiLog table for most asked questions, failed queries, low confidence answers"
         });
     }
+
+    [HttpPost("deactivate-knowledge/{id}")]
+    public async Task<IActionResult> DeactivateKnowledge(int id)
+    {
+        await _repository.DeactivateKnowledgeAsync(id);
+        return Ok($"Knowledge entry {id} deactivated");
+    }
+
+    [HttpPost("activate-knowledge/{id}")]
+    public async Task<IActionResult> ActivateKnowledge(int id)
+    {
+        await _repository.ActivateKnowledgeAsync(id);
+        return Ok($"Knowledge entry {id} activated");
+    }
+
+    [HttpPost("update-version/{id}")]
+    public async Task<IActionResult> UpdateVersion(int id, [FromQuery] int version)
+    {
+        await _repository.UpdateKnowledgeVersionAsync(id, version);
+        return Ok($"Knowledge entry {id} updated to version {version}");
+    }
 }

@@ -7,4 +7,7 @@ public interface IMutualFundRepository
     Task<List<Models.ChatHistory>> GetChatHistoryAsync(string userId, int count = 5);
     Task SaveChatHistoryAsync(Models.ChatHistory chatHistory);
     Task SaveAiLogAsync(Models.AiLog aiLog);
+    Task DeactivateKnowledgeAsync(int id);
+    Task ActivateKnowledgeAsync(int id);
+    Task UpdateKnowledgeVersionAsync(int id, int version);
 }
