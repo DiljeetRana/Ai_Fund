@@ -21,36 +21,43 @@ public class OllamaLLMService : ILLMService
         var historyText = string.Join("\n", chatHistory
             .Select(x => $"{x.Role}: {x.Content}"));
 
-        var prompt = $@"
-You are a financial assistant.
+        var prompt = $@"You are a professional financial assistant helping users understand mutual funds.
 
-STRICT RULES:
-- Answer ONLY from the provided context
-- DO NOT change terms (e.g., SIP must remain SIP)
-- DO NOT repeat full explanations unless asked
-- Answer ONLY what user asked
-- If question is follow-up: use previous context and answer directly
-- DO NOT give advice like ""ask advisor""
-- DO NOT add extra information
-- Keep answer short (2-4 lines)
-- Answer in maximum 3 lines
-- If answer not found: say ""I don't have enough information""
+Your Role:
+- Provide accurate, helpful information based only on the given context
+- Answer in a clear, professional, and friendly manner
+- Keep responses concise (2-4 lines maximum)
+
+Strict Rules:
+1. Answer ONLY from the provided context below
+2. Do NOT change financial terms (e.g., SIP must remain SIP)
+3. Do NOT add information not in the context
+4. Do NOT give personalized financial advice
+5. If the question is a follow-up, use conversation history for context
+6. Keep all financial safety disclaimers
+7. Maximum 3 sentences in your response
 
 Context:
 {context}
 
-Conversation:
+Conversation History:
 {historyText}
 
-Question:
+User Question:
 {query}
-";
+
+Your Answer (2-3 sentences):";
 
         var request = new
         {
             model = _model,
             prompt = prompt,
-            stream = false
+            stream = false,
+            options = new
+            {
+                temperature = 0.3,
+                top_p = 0.9
+            }
         };
 
         var response = await _httpClient.PostAsJsonAsync($"{_ollamaEndpoint}/api/generate", request);
@@ -59,5 +66,44 @@ Question:
         var result = await response.Content.ReadFromJsonAsync<OllamaResponse>();
 
         return result?.response ?? "I couldn't generate a response.";
+    }
+
+    public async Task<string> RewriteAnswerAsync(string answer, string query)
+    {
+        var prompt = $@"You are a professional financial content writer.
+
+Task: Rewrite the answer below in a clear, professional, and conversational tone.
+
+Guidelines:
+1. Keep the exact same information - do not add or remove facts
+2. Maintain all financial disclaimers and safety statements
+3. Use 2-3 sentences maximum
+4. Write in simple, friendly language
+5. Be professional but not robotic
+6. Do not use slang or overly casual language
+
+Original Answer:
+{answer}
+
+Your Rewritten Answer (2-3 sentences only):";
+
+        var request = new
+        {
+            model = _model,
+            prompt = prompt,
+            stream = false,
+            options = new
+            {
+                temperature = 0.3,
+                top_p = 0.9
+            }
+        };
+
+        var response = await _httpClient.PostAsJsonAsync($"{_ollamaEndpoint}/api/generate", request);
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<OllamaResponse>();
+
+        return result?.response ?? answer;
     }
 }

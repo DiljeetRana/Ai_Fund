@@ -5,4 +5,5 @@ namespace Ai_Fund.Services;
 public interface ILLMService
 {
     Task<string> AskLLMAsync(string context, string query, List<ChatMessage> chatHistory);
+    Task<string> RewriteAnswerAsync(string answer, string query);
 }

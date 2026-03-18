@@ -6,15 +6,19 @@ public static class IntentDetector
     {
         query = query.ToLower();
 
-        if (query.Contains("hi") || query.Contains("hello") || query.Contains("hey"))
-            return "GREETING";
+        // 1. QUESTION should be highest priority
+        if (query.Contains("what") || query.Contains("is") || query.Contains("how") || query.Contains("why") || query.Contains("when") || query.Contains("where"))
+            return "QUESTION";
 
-        if (query.Contains("what is") || query.Contains("define") || query.Contains("meaning"))
-            return "DEFINITION";
-
-        if (query.Contains("how much") || query.Contains("best") || query.Contains("should i") || query.Contains("recommend"))
+        // 2. ADVICE
+        if (query.Contains("should") || query.Contains("best") || query.Contains("good") || query.Contains("recommend"))
             return "ADVICE";
 
+        // 3. GREETING (exact match only - LOW priority)
+        if (query.Trim() == "hi" || query.Trim() == "hello" || query.Trim() == "hey")
+            return "GREETING";
+
+        // 4. CLOSING
         if (query.Contains("thank") || query.Contains("bye"))
             return "CLOSING";
 

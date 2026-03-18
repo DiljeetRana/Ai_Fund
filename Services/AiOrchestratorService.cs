@@ -38,6 +38,15 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse("Please provide a valid query", "System", 0, "INVALID");
             }
 
+            // Check for opinion queries
+            if (QueryNormalizer.IsOpinionQuery(query))
+            {
+                return CreateResponse("I can provide general information, but I cannot give personal opinions or financial advice.", "Static", 1.0, "OPINION");
+            }
+
+            // Normalize query (remove opinion phrases)
+            query = QueryNormalizer.NormalizeQuery(query);
+
             // 2. Detect intent
             var intent = IntentDetector.DetectIntent(query);
             _logger.LogInformation("Query: {Query}, Intent: {Intent}, UserId: {UserId}", query, intent, userId);
@@ -75,17 +84,30 @@ public class AiOrchestratorService : IAiOrchestratorService
             // 9. Build context
             var context = BuildContext(topMatches);
 
-            // 10. For high confidence matches, return direct answer (skip LLM)
-            if (intent == "GENERAL" && topMatches[0].Score > 0.85)
+            // 10. For high confidence matches, rewrite answer with LLM for natural tone
+            if (topMatches[0].Score > 0.8)
             {
-                var directAnswer = topMatches[0].Data.Answer;
+                var baseAnswer = topMatches[0].Data.Answer;
+                
+                // Combine top answers for richer context
+                var combinedAnswer = string.Join(" ", topMatches.Select(x => x.Data.Answer).Distinct());
+                
+                // Rewrite with LLM for natural tone
+                var rewrittenAnswer = await _llmService.RewriteAnswerAsync(combinedAnswer, query);
+                
+                // Clean the rewritten response
+                rewrittenAnswer = CleanResponse(rewrittenAnswer);
+                
+                // Add contextual prefix
+                var prefix = ResponseEnhancer.GetContextualPrefix(query);
+                var finalAnswer = prefix + rewrittenAnswer;
                 
                 // Save to chat history
                 await _repository.SaveChatHistoryAsync(new Models.ChatHistory
                 {
                     UserId = userId,
                     Role = "Assistant",
-                    Message = directAnswer,
+                    Message = finalAnswer,
                     CreatedDate = DateTime.UtcNow
                 });
 
@@ -94,14 +116,14 @@ public class AiOrchestratorService : IAiOrchestratorService
                 {
                     UserId = userId,
                     Query = query,
-                    Response = directAnswer,
+                    Response = finalAnswer,
                     ConfidenceScore = topMatches[0].Score,
                     Intent = intent,
-                    Source = "Database",
+                    Source = "Database+LLM",
                     CreatedDate = DateTime.UtcNow
                 });
 
-                var dbResponse = CreateResponse(directAnswer, "Database", topMatches[0].Score, intent);
+                var dbResponse = CreateResponse(finalAnswer, "Database+LLM", topMatches[0].Score, intent);
                 
                 // Cache the response
                 var dbCacheOptions = new MemoryCacheEntryOptions
@@ -147,6 +169,10 @@ public class AiOrchestratorService : IAiOrchestratorService
             });
             
             var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory);
+
+            // Add contextual prefix for natural conversation
+            var responsePrefix = ResponseEnhancer.GetContextualPrefix(query);
+            aiResponse = responsePrefix + aiResponse;
 
             // Clean response
             aiResponse = CleanResponse(aiResponse);
@@ -234,6 +260,9 @@ public class AiOrchestratorService : IAiOrchestratorService
                     if (x.Question.ToLower().Contains(normalizedQuery))
                         score += 0.1;
 
+                    // Ensure score doesn't exceed 1.0
+                    score = Math.Min(score, 1.0);
+
                     return (Data: (KnowledgeData?)new KnowledgeData { Id = x.Id, Question = x.Question, Answer = x.Answer, Embedding = x.Embedding }, Score: score);
                 }
                 catch
@@ -277,6 +306,31 @@ public class AiOrchestratorService : IAiOrchestratorService
         // Fix common LLM mistakes
         response = response.Replace("SIPI", "SIP");
         response = response.Replace("sipi", "SIP");
+        response = response.Replace("SIPIndications", "SIP");
+        response = response.Replace("languaire", "language");
+        response = response.Replace("slapg", "slang");
+        
+        // Remove prompt artifacts
+        if (response.Contains("STRICT RULE", StringComparison.OrdinalIgnoreCase))
+        {
+            // Extract only the actual answer after the rules
+            var answerStart = response.IndexOf("Answer:", StringComparison.OrdinalIgnoreCase);
+            if (answerStart > 0)
+            {
+                response = response.Substring(answerStart + 7).Trim();
+            }
+        }
+        
+        // Remove greetings from rewritten responses
+        if (response.StartsWith("Greetings!", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("Hello!", StringComparison.OrdinalIgnoreCase))
+        {
+            var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+            if (sentences.Length > 1)
+            {
+                response = string.Join(". ", sentences.Skip(1)).Trim();
+            }
+        }
         
         // Remove unwanted advice phrases
         if (response.Contains("banker", StringComparison.OrdinalIgnoreCase) || 
