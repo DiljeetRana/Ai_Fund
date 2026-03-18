@@ -25,13 +25,13 @@ public class OllamaLLMService : ILLMService
 You are a financial assistant.
 
 STRICT RULES:
-- Answer ONLY using the provided context
-- DO NOT add numbers, returns, or assumptions
-- DO NOT give financial advice
-- If information is not in context, say:
-  ""I don't have enough information""
-- Never guarantee returns
-- Keep answer simple and factual
+- Answer ONLY using the given context
+- Do NOT add new information
+- Do NOT give financial advice
+- Do NOT assume numbers or returns
+- If unsure, say: ""I don't have enough information""
+- Prefer consistent information
+- Ignore weak or conflicting data
 
 Conversation:
 {historyText}
@@ -39,8 +39,10 @@ Conversation:
 Context:
 {context}
 
-Question:
+User Question:
 {query}
+
+Answer in simple, clear language.
 ";
 
         var request = new

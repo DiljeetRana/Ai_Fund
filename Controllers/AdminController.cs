@@ -28,7 +28,9 @@ public class AdminController : ControllerBase
         {
             if (string.IsNullOrEmpty(item.Embedding))
             {
-                var embedding = await _embeddingService.GenerateEmbeddingAsync(item.Question);
+                // Normalize question before generating embedding
+                var normalizedQuestion = Services.TextNormalizer.Normalize(item.Question);
+                var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
                 var embeddingJson = JsonSerializer.Serialize(embedding);
                 await _repository.UpdateEmbeddingAsync(item.Id, embeddingJson);
                 count++;
@@ -36,5 +38,39 @@ public class AdminController : ControllerBase
         }
 
         return Ok($"Generated embeddings for {count} records");
+    }
+
+    [HttpPost("regenerate-embeddings")]
+    public async Task<IActionResult> RegenerateEmbeddings()
+    {
+        var allData = await _repository.GetAllKnowledgeAsync();
+        int count = 0;
+
+        foreach (var item in allData)
+        {
+            // Normalize question before generating embedding
+            var normalizedQuestion = Services.TextNormalizer.Normalize(item.Question);
+            var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
+            var embeddingJson = JsonSerializer.Serialize(embedding);
+            await _repository.UpdateEmbeddingAsync(item.Id, embeddingJson);
+            count++;
+        }
+
+        return Ok($"Regenerated embeddings for {count} records with normalization");
+    }
+
+    [HttpGet("check-embeddings")]
+    public async Task<IActionResult> CheckEmbeddings()
+    {
+        var allData = await _repository.GetAllKnowledgeAsync();
+        var result = allData.Select(x => new
+        {
+            x.Id,
+            x.Question,
+            HasEmbedding = !string.IsNullOrEmpty(x.Embedding),
+            EmbeddingLength = x.Embedding?.Length ?? 0
+        });
+
+        return Ok(result);
     }
 }
