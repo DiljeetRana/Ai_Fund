@@ -73,4 +73,15 @@ public class AdminController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpGet("analytics")]
+    public async Task<IActionResult> GetAnalytics([FromQuery] string? userId = null)
+    {
+        // This is a simple implementation - in production, create a proper analytics repository
+        return Ok(new
+        {
+            Message = "Analytics endpoint - implement with AiLog queries",
+            Suggestion = "Query AiLog table for most asked questions, failed queries, low confidence answers"
+        });
+    }
 }

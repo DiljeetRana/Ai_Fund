@@ -92,7 +92,22 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
 
             // 11. Call LLM
-            var chatHistory = new List<ChatMessage>(); // TODO: Load from DB per user
+            var chatHistoryRecords = await _repository.GetChatHistoryAsync(userId);
+            var chatHistory = chatHistoryRecords.Select(x => new ChatMessage
+            {
+                Role = x.Role,
+                Content = x.Message
+            }).ToList();
+            
+            // Save user message to DB
+            await _repository.SaveChatHistoryAsync(new Models.ChatHistory
+            {
+                UserId = userId,
+                Role = "User",
+                Message = query,
+                CreatedDate = DateTime.UtcNow
+            });
+            
             var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory);
 
             // 12. Apply guardrails
@@ -105,6 +120,27 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 13. Create final response
             var finalResponse = CreateResponse(aiResponse, "RAG+LLM", topMatches[0].Score, intent);
+
+            // Save AI response to DB
+            await _repository.SaveChatHistoryAsync(new Models.ChatHistory
+            {
+                UserId = userId,
+                Role = "Assistant",
+                Message = aiResponse,
+                CreatedDate = DateTime.UtcNow
+            });
+
+            // Save AI log for monitoring
+            await _repository.SaveAiLogAsync(new Models.AiLog
+            {
+                UserId = userId,
+                Query = query,
+                Response = aiResponse,
+                ConfidenceScore = topMatches[0].Score,
+                Intent = intent,
+                Source = "RAG+LLM",
+                CreatedDate = DateTime.UtcNow
+            });
 
             // 14. Cache the response
             var finalCacheOptions = new MemoryCacheEntryOptions
