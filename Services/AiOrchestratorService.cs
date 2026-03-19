@@ -251,6 +251,9 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 9. Build context
             var context = BuildContext(topMatches);
+            
+            // Get rich context for reuse throughout the method
+            var richContext = _contextManager.GetRichContext(userId);
 
             // 9.5. Check for personal query (PRIORITY 1)
             if (isPersonalQuery)
@@ -260,12 +263,49 @@ public class AiOrchestratorService : IAiOrchestratorService
                 // Check for returns query first
                 if (_smartGuidanceService.IsReturnsQuery(originalQuery))
                 {
+                    // Extract investment type, amount, and years
+                    var investmentType = _smartGuidanceService.ExtractInvestmentType(originalQuery);
+                    var queryAmount = _smartGuidanceService.ExtractAmount(originalQuery);
+                    var years = _smartGuidanceService.ExtractYears(originalQuery);
+                    
+                    // If no amount in current query, try to get from context
+                    if (queryAmount == 0 && richContext != null)
+                    {
+                        queryAmount = _smartGuidanceService.ExtractAmount(richContext.LastUserQuery);
+                    }
+                    
+                    // If no investment type in current query, try from context
+                    if (string.IsNullOrEmpty(investmentType) && richContext != null)
+                    {
+                        investmentType = _smartGuidanceService.ExtractInvestmentType(richContext.LastUserQuery);
+                    }
+                    
+                    // Default to 1 year if not specified
+                    if (years == 0)
+                        years = 1;
+                    
+                    // If we have all required info, give personalized calculation
+                    if (queryAmount > 0 && !string.IsNullOrEmpty(investmentType))
+                    {
+                        var universalReturns = _smartGuidanceService.GenerateUniversalReturns(investmentType, queryAmount, years);
+                        var returnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                        _contextManager.SaveRichContext(userId, originalQuery, universalReturns, topic, returnsEntities);
+                        return CreateResponse(universalReturns, "SmartGuidance", 1.0, "GUIDANCE");
+                    }
+                    
+                    // If we have amount and years but no type, assume SIP
+                    if (queryAmount > 0 && years > 0)
+                    {
+                        var personalizedReturns = _smartGuidanceService.GenerateReturnsForAmount(queryAmount, years);
+                        var sipEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                        _contextManager.SaveRichContext(userId, originalQuery, personalizedReturns, topic, sipEntities);
+                        return CreateResponse(personalizedReturns, "SmartGuidance", 1.0, "GUIDANCE");
+                    }
+                    
+                    // Otherwise give general returns guidance
                     var returnsGuidance = _smartGuidanceService.GenerateReturnsGuidance();
-                    
-                    // Save rich context
-                    var returnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
-                    _contextManager.SaveRichContext(userId, originalQuery, returnsGuidance, topic, returnsEntities);
-                    
+                    var generalReturnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                    _contextManager.SaveRichContext(userId, originalQuery, returnsGuidance, topic, generalReturnsEntities);
                     return CreateResponse(returnsGuidance, "SmartGuidance", 1.0, "GUIDANCE");
                 }
                 
@@ -461,7 +501,6 @@ public class AiOrchestratorService : IAiOrchestratorService
             });
             
             // Check for repetition and force expansion
-            var richContext = _contextManager.GetRichContext(userId);
             var lastAnswer = richContext?.LastAnswer ?? string.Empty;
             var isFollowUpDetected = _contextManager.IsFollowUpQuery(originalQuery);
             var forceExpansion = isExpansion || (!string.IsNullOrEmpty(lastAnswer) && context.Contains(lastAnswer));
@@ -598,16 +637,20 @@ public class AiOrchestratorService : IAiOrchestratorService
 
     private ChatResponse? ApplyGuardrails(string aiResponse)
     {
-        // Multi-layer safety checks
-        if (aiResponse.Contains("guarantee", StringComparison.OrdinalIgnoreCase) ||
-            aiResponse.Contains("fixed return", StringComparison.OrdinalIgnoreCase))
+        // Only block truly dangerous guarantees, not informational content
+        if (aiResponse.Contains("guaranteed returns", StringComparison.OrdinalIgnoreCase) ||
+            aiResponse.Contains("fixed guaranteed return", StringComparison.OrdinalIgnoreCase) ||
+            aiResponse.Contains("100% guaranteed", StringComparison.OrdinalIgnoreCase))
         {
             return CreateResponse("Mutual funds are subject to market risk. No returns are guaranteed.", "SafetyFilter", 0, "BLOCKED");
         }
 
-        if (aiResponse.Contains("$") || aiResponse.Contains("₹"))
+        // Only block if giving specific financial amounts as personal advice
+        if ((aiResponse.Contains("you must invest", StringComparison.OrdinalIgnoreCase) ||
+             aiResponse.Contains("you should definitely invest", StringComparison.OrdinalIgnoreCase)) &&
+            (aiResponse.Contains("₹") || aiResponse.Contains("$")))
         {
-            return CreateResponse("I can provide general information, but not financial advice.", "SafetyFilter", 0, "BLOCKED");
+            return CreateResponse("I can provide general information, but not specific financial advice.", "SafetyFilter", 0, "BLOCKED");
         }
 
         return null;
