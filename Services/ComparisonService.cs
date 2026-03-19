@@ -20,6 +20,8 @@ public class ComparisonService : IComparisonService
                query.Contains("versus") ||
                query.Contains("compare") ||
                query.Contains("comparison") ||
+               query.Contains("which one") ||
+               query.Contains("which will") ||
                query.Contains("better") ||
                (query.Contains("between") && query.Contains("and"));
     }

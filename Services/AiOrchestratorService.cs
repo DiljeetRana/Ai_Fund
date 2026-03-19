@@ -194,30 +194,35 @@ public class AiOrchestratorService : IAiOrchestratorService
             // 7. Handle comparison queries with returns/profit
             if (isComparison)
             {
-                // Check if it's a returns/profit comparison
-                if (_smartGuidanceService.IsReturnsQuery(originalQuery) || 
-                    originalQuery.ToLower().Contains("profit") ||
-                    originalQuery.ToLower().Contains("difference"))
+                // Extract all investment types from query
+                var allTypes = _comparisonService.ExtractAllEntities(query);
+                var queryAmount = _smartGuidanceService.ExtractAmount(originalQuery);
+                var years = _smartGuidanceService.ExtractYears(originalQuery);
+                
+                // If no amount in current query, try to get from context
+                if (queryAmount == 0 && richContext != null)
                 {
-                    var allTypes = _comparisonService.ExtractAllEntities(query);
-                    var queryAmount = _smartGuidanceService.ExtractAmount(originalQuery);
-                    var years = _smartGuidanceService.ExtractYears(originalQuery);
-                    
-                    if (queryAmount == 0 && richContext != null)
-                    {
-                        queryAmount = _smartGuidanceService.ExtractAmount(richContext.LastUserQuery);
-                    }
-                    
-                    if (years == 0)
-                        years = 1;
-                    
-                    if (allTypes.Count >= 2 && queryAmount > 0)
-                    {
-                        var comparison = _smartGuidanceService.CompareInvestments(allTypes[0], allTypes[1], queryAmount, years);
-                        var compEntities = _comparisonService.ExtractAllEntities(originalQuery);
-                        _contextManager.SaveRichContext(userId, originalQuery, comparison, topic, compEntities);
-                        return CreateResponse(comparison, "SmartGuidance", 1.0, "COMPARISON");
-                    }
+                    queryAmount = _smartGuidanceService.ExtractAmount(richContext.LastUserQuery);
+                }
+                
+                // If no types found in current query, try from context
+                if (allTypes.Count == 0 && richContext != null && richContext.LastEntities.Count >= 2)
+                {
+                    allTypes = richContext.LastEntities;
+                }
+                
+                // Default to 1 year if not specified
+                if (years == 0)
+                    years = 1;
+                
+                // If we have 2+ types and amount, do comparison
+                if (allTypes.Count >= 2 && queryAmount > 0)
+                {
+                    var comparison = _smartGuidanceService.CompareInvestments(allTypes[0], allTypes[1], queryAmount, years);
+                    var compEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                    if (compEntities.Count == 0) compEntities = allTypes;
+                    _contextManager.SaveRichContext(userId, originalQuery, comparison, topic, compEntities);
+                    return CreateResponse(comparison, "SmartGuidance", 1.0, "COMPARISON");
                 }
                 
                 // Extract entities if not already done
@@ -693,31 +698,44 @@ public class AiOrchestratorService : IAiOrchestratorService
             return response;
 
         // Remove common LLM artifacts
-        var cleanPatterns = new[]
+        var cleanPatterns = new Dictionary<string, string>
         {
-            "SIPI", "sipi", "SIPIndications", "SIPV", "sipv",
-            "languaire", "slapg", "Single-Issue Plan",
-            "Systematic Invested Plan Investment Vehicle"
+            { "SIPI", "SIP" },
+            { "sipi", "SIP" },
+            { "SIPIndications", "SIP" },
+            { "SIPV", "SIP" },
+            { "sipv", "SIP" },
+            { "languaire", "SIP" },
+            { "slapg", "SIP" },
+            { "Single-Issue Plan", "SIP" },
+            { "Systematic Invested Plan Investment Vehicle", "SIP" },
+            { "Saving Accounts (SIP)", "SIP" },
+            { "Saving Account (SIP)", "SIP" }
         };
         
         foreach (var pattern in cleanPatterns)
         {
-            response = response.Replace(pattern, "SIP", StringComparison.OrdinalIgnoreCase);
+            response = response.Replace(pattern.Key, pattern.Value, StringComparison.OrdinalIgnoreCase);
         }
         
         // Remove dialogue artifacts (Cuxtomo, Miria, etc.)
         if (response.Contains("Cuxtomo:", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("Miria:", StringComparison.OrdinalIgnoreCase) ||
-            response.Contains("Customer:", StringComparison.OrdinalIgnoreCase))
+            response.Contains("Maria:", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("Customer:", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("AI Fund Assistant", StringComparison.OrdinalIgnoreCase))
         {
             // Extract only the actual answer, skip dialogue
             var lines = response.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
             var answerLines = lines.Where(l => 
                 !l.Contains("Cuxtomo:", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("Miria:", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Maria:", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("Customer:", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("AI Fund Assistant", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("Good morning", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("How may I help", StringComparison.OrdinalIgnoreCase) &&
+                !l.StartsWith("Yes,", StringComparison.OrdinalIgnoreCase) &&
                 l.Length > 20
             ).ToList();
             
@@ -758,10 +776,11 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
         }
         
-        // Remove unwanted greetings
+        // Remove unwanted greetings and AI assistant references
         if (response.StartsWith("Greetings!", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("Hello!", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("Good morning", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("Yes,", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("As a professional", StringComparison.OrdinalIgnoreCase))
         {
             var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
