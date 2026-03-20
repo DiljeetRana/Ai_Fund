@@ -45,7 +45,10 @@ public class SyncService : ISyncService
 
             _logger.LogInformation("Found {Count} active knowledge entries to sync", allKnowledge.Count);
 
+            int syncedCount = 0;
+            int skippedCount = 0;
             int total = allKnowledge.Count;
+
             foreach (var item in allKnowledge)
             {
                 try
@@ -58,7 +61,7 @@ public class SyncService : ISyncService
                         continue;
                     }
 
-                    _logger.LogInformation(">>> SYNC ITEM ({Current}/{Total}): ID={Id}, Text='{Text}...' ", syncedCount + skippedCount + 1, total, item.Id, item.Question.Substring(0, Math.Min(50, item.Question.Length)));
+                    _logger.LogInformation(">>> SYNC ITEM ({Current}/{Total}): ID={Id}, Text='{Text}...' ", syncedCount + skippedCount + 1, total, item.Id, item.Question.Length > 50 ? item.Question.Substring(0, 50) : item.Question);
 
                     // ALWAYS regenerate embedding for Voyage (1024d)
                     var normalizedQuestion = TextNormalizer.Normalize(item.Question);
