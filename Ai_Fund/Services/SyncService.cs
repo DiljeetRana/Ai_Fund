@@ -65,7 +65,7 @@ public class SyncService : ISyncService
 
                     // ALWAYS regenerate embedding for Voyage (1024d)
                     var normalizedQuestion = TextNormalizer.Normalize(item.Question);
-                    var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
+                    var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion, "passage");
                     
                     if (embedding.All(v => v == 0))
                     {
