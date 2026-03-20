@@ -125,6 +125,17 @@ public class KnowledgeGapController : ControllerBase
             var normalizedQuery = TextNormalizer.Normalize(query);
             var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuery);
 
+            // Handle fail-safe zero-vector from service
+            if (embedding == null || embedding.Length == 0 || embedding.All(v => v == 0))
+            {
+                return Ok(new
+                {
+                    Query = query,
+                    Message = "Search temporarily limited (Embedding Service Unavailable).",
+                    Results = new List<object>()
+                });
+            }
+
             // Search Qdrant with very low threshold for debugging
             var results = await qdrantService.SearchAsync(embedding, limit: 5);
             

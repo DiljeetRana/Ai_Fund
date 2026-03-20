@@ -23,13 +23,12 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         try
         {
             var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-MiniLM-L6-v2";
-            _modelUrl = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{model}";
+            _modelUrl = $"https://api-inference.huggingface.co/models/{model}";
             
             var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
             if (!string.IsNullOrEmpty(apiKey))
             {
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-                _httpClient.DefaultRequestHeaders.Add("X-Wait-For-Model", "true");
                 _logger.LogInformation("HuggingFace API Key configured for stable model: {Model}", model);
             }
             else
@@ -49,18 +48,20 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
     {
         try
         {
-            // NEW: Use the direct string payload as suggested by the user
-            // HuggingFace pipeline endpoints often prefer raw strings over JSON objects
-            var response = await _httpClient.PostAsJsonAsync(_modelUrl, text);
+            // SURGICAL FIX: /models/ endpoint + {"inputs": "text"} format
+            var payload = new { inputs = text };
+            var response = await _httpClient.PostAsJsonAsync(_modelUrl, payload);
             
+            var content = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("HF RESPONSE: {Content}", content);
+
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                var json = JsonSerializer.Deserialize<JsonElement>(content);
                 return ParseEmbedding(json);
             }
             
-            var error = await response.Content.ReadAsStringAsync();
-            _logger.LogError("HuggingFace API failed: {Status} - {Error}", response.StatusCode, error);
+            _logger.LogError("HuggingFace API failed: {Status} - {Error}", response.StatusCode, content);
             
             // 🔥 FAIL SAFE: Return empty vector instead of crashing
             _logger.LogWarning("Returning zero-vector (384d) as fail-safe fallback.");
