@@ -17,7 +17,7 @@ public class VoyageEmbeddingService : IEmbeddingService
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         
         _apiKey = configuration["Voyage:ApiKey"]?.Trim() ?? string.Empty;
-        _model = configuration["Voyage:Model"] ?? "voyage-3";
+        _model = configuration["HuggingFace:EmbeddingModel"] ?? configuration["Voyage:Model"] ?? "voyage-2";
         _logger = logger;
 
         if (string.IsNullOrEmpty(_apiKey))
