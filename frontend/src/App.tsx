@@ -1,0 +1,126 @@
+import React, { useState, useEffect, useRef } from 'react';
+import Header from './components/Header';
+import Dashboard from './components/Dashboard';
+import ChatMessage from './components/ChatMessage';
+import TypingIndicator from './components/TypingIndicator';
+import EmptyState from './components/EmptyState';
+import ChatInput from './components/ChatInput';
+import { Message, ChatResponse } from './types';
+
+const API_URL = 'https://localhost:44328/api/MutualFund/ask';
+const USER_ID = '1';
+
+function App() {
+  const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const chatAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  const scrollToBottom = () => {
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+    }
+  };
+
+  const handleSendMessage = async (content: string) => {
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content,
+      isUser: true,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsTyping(true);
+
+    try {
+      const response = await fetch(
+        `${API_URL}?query=${encodeURIComponent(content)}&userId=${USER_ID}`
+      );
+
+      if (!response.ok) throw new Error('Network error');
+
+      const data: ChatResponse = await response.json();
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: data.answer,
+        isUser: false,
+        timestamp: new Date(),
+        source: data.source,
+        confidence: data.confidence,
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: 'Sorry, I encountered an error. Please try again.',
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const handleCopy = (content: string) => {
+    navigator.clipboard.writeText(content);
+  };
+
+  const handleRegenerate = () => {
+    const lastUserMessage = messages.filter((m) => m.isUser).pop();
+    if (lastUserMessage) {
+      handleSendMessage(lastUserMessage.content);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
+      {/* Header with Navigation */}
+      <Header currentView={currentView} onViewChange={setCurrentView} />
+
+      {/* Main Content */}
+      {currentView === 'dashboard' ? (
+        <Dashboard />
+      ) : (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Chat Area */}
+          <div
+            ref={chatAreaRef}
+            className="flex-1 overflow-y-auto px-6 py-6 scrollbar-hide"
+          >
+            <div className="max-w-3xl mx-auto">
+              {messages.length === 0 ? (
+                <EmptyState onSuggestionClick={handleSendMessage} />
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <ChatMessage
+                      key={message.id}
+                      message={message}
+                      onCopy={handleCopy}
+                      onRegenerate={handleRegenerate}
+                    />
+                  ))}
+                  {isTyping && <TypingIndicator />}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Input Area */}
+          <ChatInput onSend={handleSendMessage} disabled={isTyping} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
