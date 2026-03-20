@@ -36,26 +36,33 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         try
         {
             var request = new { inputs = text };
-            var response = await _httpClient.PostAsJsonAsync(_modelUrl, request);
-            
-            if (!response.IsSuccessStatusCode)
+            int maxRetries = 3;
+            int delayMs = 2000;
+            HttpResponseMessage? response = null;
+
+            for (int i = 0; i < maxRetries; i++)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogError("HuggingFace API error: {StatusCode} - {Error}", response.StatusCode, errorContent);
+                response = await _httpClient.PostAsJsonAsync(_modelUrl, request);
                 
-                // If model is loading, wait and retry once
-                if (errorContent.Contains("currently loading"))
+                if (response.IsSuccessStatusCode)
+                    break;
+
+                var errorContent = await response.Content.ReadAsStringAsync();
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || 
+                    errorContent.Contains("currently loading"))
                 {
-                    _logger.LogWarning("Model is loading, waiting 20 seconds and retrying...");
-                    await Task.Delay(20000);
-                    response = await _httpClient.PostAsJsonAsync(_modelUrl, request);
-                    response.EnsureSuccessStatusCode();
+                    _logger.LogWarning("HuggingFace API busy (Retry {Retry}/{Max}): {StatusCode}. Waiting {Delay}ms...", i + 1, maxRetries, response.StatusCode, delayMs);
+                    await Task.Delay(delayMs);
+                    delayMs *= 2; // Exponential backoff
                 }
                 else
                 {
                     response.EnsureSuccessStatusCode();
                 }
             }
+
+            response!.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadFromJsonAsync<JsonElement>();
             

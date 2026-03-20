@@ -78,6 +78,9 @@ public class SyncService : ISyncService
                     syncedCount++;
 
                     _logger.LogDebug("Synced ID {Id}: {Question}", item.Id, item.Question);
+                    
+                    // Add a small delay to avoid hitting HuggingFace rate limits
+                    await Task.Delay(500);
                 }
                 catch (Exception ex)
                 {
