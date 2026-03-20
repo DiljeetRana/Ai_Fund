@@ -22,8 +22,8 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         
         try
         {
-            var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
-            _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
+            var model = configuration["HuggingFace:EmbeddingModel"] ?? "BAAI/bge-base-en-v1.5";
+            _modelUrl = $"https://api-inference.huggingface.co/models/{model}";
             
             var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
             if (!string.IsNullOrEmpty(apiKey))
