@@ -48,7 +48,11 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
     {
         try
         {
-            var request = new { inputs = text };
+            var request = new 
+            { 
+                inputs = new[] { text },
+                options = new { wait_for_model = true }
+            };
             int maxRetries = 3;
             int delayMs = 2000;
             HttpResponseMessage? response = null;
