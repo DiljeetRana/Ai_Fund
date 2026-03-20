@@ -11,7 +11,6 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
 {
     private readonly HttpClient _httpClient;
     private readonly string _modelUrl;
-    private readonly string _modelName;
     private readonly ILogger<HuggingFaceEmbeddingService> _logger;
 
     public HuggingFaceEmbeddingService(IConfiguration configuration, ILogger<HuggingFaceEmbeddingService> logger)
@@ -20,8 +19,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         
         var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
-        _modelUrl = "https://router.huggingface.co/hf-inference/v1/embeddings";
-        _modelName = model;
+        _modelUrl = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{model}";
         
         _logger = logger;
         
@@ -52,8 +50,8 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         {
             var request = new 
             { 
-                model = _modelName,
-                input = text
+                inputs = text,
+                options = new { wait_for_model = true }
             };
             int maxRetries = 3;
             int delayMs = 2000;
@@ -86,17 +84,31 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
 
             var json = await response.Content.ReadFromJsonAsync<JsonElement>();
             
-            // OpenAI format: { "data": [ { "embedding": [...] } ] }
+            // HuggingFace feature-extraction returns a nested array for single input: [[f1, f2...]]
+            // or sometimes a flat array for non-batch: [f1, f2...]
             var embeddings = new List<float>();
             
-            if (json.TryGetProperty("data", out var dataArray) && dataArray.ValueKind == JsonValueKind.Array)
+            if (json.ValueKind == JsonValueKind.Array)
             {
-                var firstData = dataArray.EnumerateArray().FirstOrDefault();
-                if (firstData.TryGetProperty("embedding", out var embedArray) && embedArray.ValueKind == JsonValueKind.Array)
+                var enumArr = json.EnumerateArray();
+                if (enumArr.Any())
                 {
-                    foreach (var value in embedArray.EnumerateArray())
+                    var firstElement = enumArr.First();
+                    if (firstElement.ValueKind == JsonValueKind.Array)
                     {
-                        embeddings.Add(value.GetSingle());
+                        // Nested array [[...]]
+                        foreach (var value in firstElement.EnumerateArray())
+                        {
+                            embeddings.Add(value.GetSingle());
+                        }
+                    }
+                    else
+                    {
+                        // Flat array [...]
+                        foreach (var value in json.EnumerateArray())
+                        {
+                            embeddings.Add(value.GetSingle());
+                        }
                     }
                 }
             }
@@ -104,11 +116,11 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
             if (embeddings.Count == 0)
             {
                 var raw = json.GetRawText();
-                _logger.LogWarning("HuggingFace (v1/embeddings) returned unexpected format: {Raw}", raw);
+                _logger.LogWarning("HuggingFace returned empty or unexpected format: {Raw}", raw);
                 throw new Exception($"HuggingFace returned invalid embedding format. Raw response: {raw}");
             }
             
-            _logger.LogInformation("Generated embedding with {Count} dimensions via OpenAI-Compatible API", embeddings.Count);
+            _logger.LogInformation("Generated embedding with {Count} dimensions via feature-extraction pipeline", embeddings.Count);
             return embeddings.ToArray();
         }
         catch (Exception ex)
