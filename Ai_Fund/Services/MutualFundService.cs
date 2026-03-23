@@ -121,25 +121,21 @@ public class MutualFundService : IMutualFundService
                 {
                     var embedding = JsonSerializer.Deserialize<float[]>(x.Embedding);
                     if (embedding == null || embedding.Length == 0)
-                        return null;
+                        return (Data: x, Score: 0.0);
                     
-                    return new
-                    {
-                        Data = x,
-                        Score = VectorHelper.CosineSimilarity(queryEmbedding, embedding)
-                    };
+                    return (Data: x, Score: VectorHelper.CosineSimilarity(queryEmbedding, embedding));
                 }
                 catch
                 {
-                    return null;
+                    return (Data: x, Score: 0.0);
                 }
             })
-            .Where(x => x != null && x.Score > 0.6)
+            .Where(x => x.Score > 0.6)
             .OrderByDescending(x => x.Score)
             .Take(3)
             .ToList();
 
-        if (!topMatches.Any())
+        if (topMatches == null || !topMatches.Any())
         {
             var noInfoResponse = "I don't have enough information.";
             _chatHistory.Add(new ChatMessage { Role = "Assistant", Content = noInfoResponse });
@@ -157,14 +153,13 @@ public class MutualFundService : IMutualFundService
             };
         }
 
-        // Combine top 3 contexts (distinct)
         var context = string.Join("\n",
             topMatches
                 .Select(x => x.Data.Answer)
                 .Distinct());
 
         // For simple definitions, return direct answer
-        if (intent == "DEFINITION" && topMatches[0].Score > 0.8)
+        if (intent == "DEFINITION" && topMatches.Count > 0 && topMatches[0].Score > 0.8)
         {
             var directAnswer = topMatches[0].Data.Answer;
             _chatHistory.Add(new ChatMessage { Role = "Assistant", Content = directAnswer });
@@ -211,7 +206,7 @@ public class MutualFundService : IMutualFundService
         {
             Answer = aiResponse,
             Source = "RAG+LLM",
-            Confidence = topMatches[0].Score,
+            Confidence = topMatches.Count > 0 ? topMatches[0].Score : 0,
             Intent = intent
         };
     }
