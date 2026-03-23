@@ -82,7 +82,7 @@ public class QdrantService : IQdrantService
                     collectionName: _collectionName,
                     vectorsConfig: new VectorParams
                     {
-                        Size = 1024, // Voyage AI dimension
+                        Size = 768, // Gemini text-embedding-004 dimension
                         Distance = Distance.Cosine
                     }
                 );
