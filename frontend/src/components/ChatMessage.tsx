@@ -17,50 +17,50 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onCopy, onRegenerate
 
   return (
     <div
-      className={`flex mb-6 animate-fadeIn ${
+      className={`flex mb-8 animate-fadeIn ${
         message.isUser ? 'justify-end' : 'justify-start'
       }`}
     >
-      <div className={`max-w-[75%] ${message.isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={`max-w-[85%] md:max-w-[75%] ${message.isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         {/* Message Bubble */}
         <div
-          className={`px-5 py-4 rounded-2xl text-[15px] leading-relaxed shadow-sm ${
+          className={`px-5 py-4 rounded-2xl text-[15px] leading-relaxed ${
             message.isUser
-              ? 'bg-gradient-to-r from-violet-500 to-cyan-500 text-white rounded-tr-sm shadow-md shadow-violet-500/20'
-              : 'glass-panel text-slate-800 rounded-tl-sm'
+              ? 'bg-slate-900 text-white rounded-tr-sm shadow-md shadow-slate-200'
+              : 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm'
           }`}
         >
-          {message.content}
+          <div className="whitespace-pre-wrap">{message.content}</div>
         </div>
 
-        {/* Metadata (AI only) */}
+        {/* Metadata & Actions */}
         {!message.isUser && (
-          <>
-            <div className="flex items-center gap-3 mt-3 ml-2 text-xs text-slate-400">
+          <div className="flex flex-col gap-3 mt-3 ml-1">
+            <div className="flex items-center gap-3 text-[11px] font-medium uppercase tracking-wider text-slate-400">
               {message.source && (
-                <span className="px-3 py-1 bg-slate-100/80 border border-slate-200/50 rounded-full text-slate-600 font-medium">
-                  {message.source} {message.confidence && `${Math.round(message.confidence * 100)}%`}
+                <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200/50">
+                  {message.source} {message.confidence && `• ${Math.round(message.confidence * 100)}%`}
                 </span>
               )}
               <span>{formatTime(message.timestamp)}</span>
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 mt-2 ml-2">
+            <div className="flex gap-2">
               <button
                 onClick={() => onCopy(message.content)}
-                className="px-3 py-1.5 text-xs bg-white/60 border border-slate-200/50 rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-all duration-300 shadow-sm"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-all shadow-sm active:scale-95"
               >
-                📋 Copy
+                <span>📋</span> Copy
               </button>
               <button
                 onClick={onRegenerate}
-                className="px-3 py-1.5 text-xs bg-white/60 border border-slate-200/50 rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-all duration-300 shadow-sm"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-all shadow-sm active:scale-95"
               >
-                🔄 Regenerate
+                <span>🔄</span> Regenerate
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

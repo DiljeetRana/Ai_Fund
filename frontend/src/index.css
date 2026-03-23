@@ -4,8 +4,8 @@
 
 @layer base {
   body {
-    /* Premium crisp light background */
-    @apply font-['Inter'] bg-[#f8fafc] text-slate-800 antialiased selection:bg-primary/20 selection:text-primary-dark;
+    /* Premium professional light background */
+    @apply font-['Inter'] bg-white text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900;
   }
 }
 
@@ -19,19 +19,30 @@
     scrollbar-width: none;
   }
 
+  /* Professional Whiteboard Grid */
+  .bg-whiteboard {
+    background-color: #ffffff;
+    background-image: radial-gradient(#e2e8f0 0.8px, transparent 0.8px);
+    background-size: 24px 24px;
+  }
+
   .glass-panel {
-    @apply bg-white/70 backdrop-blur-2xl border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+    @apply bg-white/80 backdrop-blur-md border border-slate-200 shadow-[0_4px_20px_rgba(0,0,0,0.03)];
   }
 
   .glass-card {
-    @apply bg-white border border-slate-100 hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300;
+    @apply bg-white border border-slate-200 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-300 rounded-2xl;
   }
 
   .text-gradient {
-    background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    color: transparent;
+    @apply bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent;
+  }
+  
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-95;
+  }
+  
+  .btn-secondary {
+    @apply bg-white border border-slate-200 hover:border-slate-300 text-slate-600 hover:text-slate-900 font-semibold py-2.5 px-6 rounded-xl transition-all shadow-sm active:scale-95;
   }
 }
