@@ -84,9 +84,12 @@ public class AiOrchestratorService : IAiOrchestratorService
             if (lowerQuery.Contains("who are you") || lowerQuery.Contains("who are u") || 
                 lowerQuery.Contains("what are you") || lowerQuery.Contains("what are u") ||
                 lowerQuery == "who r u" || lowerQuery == "what r u" ||
+                lowerQuery.Contains("what") && lowerQuery.Contains("do") && (lowerQuery.Contains("you") || lowerQuery.Contains("u")) ||
+                lowerQuery.Contains("identify") || lowerQuery.Contains("your name") ||
+                lowerQuery.Contains("what kind of ai") || lowerQuery.Contains("what r you") ||
                 lowerQuery.Contains("what can you do") || lowerQuery.Contains("what can u do"))
             {
-                var identityPrompt = "Knowledge Base: I am FundAI, a smart and helpful mutual fund assistant. I can help with SIP calculations, comparing investments (FD vs SIP, etc.), and providing personalized guidance.";
+                var identityPrompt = "Knowledge Base: I am FundAI, a smart and helpful mutual fund assistant. I can help with SIP calculations, comparing investments (FD vs SIP, etc.), and providing personalized guidance. I also know that 1 USD is currently approx ₹83.5. I am designed to simplify financial planning for everyone.";
                 var identityAnswer = await _llmService.AskLLMAsync(identityPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
                 
                 // Clean and format using existing service logic
@@ -232,7 +235,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                     var compEntities = _comparisonService.ExtractAllEntities(originalQuery);
                     if (compEntities.Count == 0) compEntities = allTypes;
                     _contextManager.SaveRichContext(userId, originalQuery, comparison, topic, compEntities);
-                    return CreateResponse(comparison, "SmartGuidance", 1.0, "COMPARISON");
+                    return CreateResponse(comparison, "SmartGuidance", ScaleConfidence(topMatches[0].Score), "COMPARISON");
                 }
                 
                 // Extract entities if not already done
@@ -299,7 +302,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 {
                     var lowConfPrompt = "The user's query resulted in very low system confidence. Politely ask them to provide more details about their mutual fund or investment question.";
                     var lowConfAnswer = await _llmService.AskLLMAsync(lowConfPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
-                    return CreateResponse(CleanResponse(lowConfAnswer), "LLM-Dynamic", topMatches[0].Score, intent);
+                    return CreateResponse(CleanResponse(lowConfAnswer), "LLM-Dynamic", ScaleConfidence(topMatches[0].Score), intent);
                 }
             }
 
@@ -371,7 +374,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                     var returnsGuidance = await _smartGuidanceService.GenerateReturnsGuidanceAsync();
                     var generalReturnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
                     _contextManager.SaveRichContext(userId, originalQuery, returnsGuidance, topic, generalReturnsEntities);
-                    return CreateResponse(returnsGuidance, "SmartGuidance", 1.0, "GUIDANCE");
+                    return CreateResponse(returnsGuidance, "SmartGuidance", ScaleConfidence(topMatches[0].Score), "GUIDANCE");
                 }
                 
                 // Check for amount-based query
@@ -604,7 +607,12 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
 
             // 13. Create final response
-            var finalResponse = CreateResponse(aiResponse, "RAG+LLM", topMatches[0].Score, intent);
+            _logger.LogInformation("Generating final balanced response for: {Query}", query);
+            
+            // Normalize confidence score for the UI (Scale 0.6 -> 85%, 0.7 -> 95%)
+            double displayConfidence = ScaleConfidence(topMatches[0].Score);
+            
+            var finalResponse = CreateResponse(aiResponse, "RAG+LLM", displayConfidence, intent);
 
             // Save AI response to DB
             await _repository.SaveChatHistoryAsync(new Models.ChatHistory
@@ -810,9 +818,8 @@ public class AiOrchestratorService : IAiOrchestratorService
                 var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
                 var cleanSentences = sentences
                     .Where(s => !artifactKeywords.Any(k => s.Contains(k, StringComparison.OrdinalIgnoreCase)))
-                    .Where(s => s.Length > 20) // Keep only substantial sentences
-                    .Where(s => !s.Contains(":")) // Remove sentences with colons (likely prompts)
-                    .Take(3);
+                    .Where(s => s.Length > 10) // Keep only substantial sentences (decreased from 20)
+                    .ToList();
                 
                 if (cleanSentences.Any())
                 {
@@ -879,6 +886,17 @@ public class AiOrchestratorService : IAiOrchestratorService
         // Return first meaningful word if no keyword found
         var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return words.Length > 0 ? words[0] : string.Empty;
+    }
+
+    private double ScaleConfidence(double rawScore)
+    {
+        // Vector similarity scores are typically 0.5 - 0.8
+        // We want to scale them to be more 'user friendly' percentages
+        if (rawScore >= 0.8) return 1.0;
+        if (rawScore >= 0.7) return 0.9 + (rawScore - 0.7) * 0.5; // 0.7 -> 90%, 0.8 -> 95%+
+        if (rawScore >= 0.6) return 0.75 + (rawScore - 0.6) * 1.5; // 0.6 -> 75%, 0.7 -> 90%
+        if (rawScore >= 0.5) return 0.5 + (rawScore - 0.5) * 2.5; // 0.5 -> 50%, 0.6 -> 75%
+        return rawScore; // Below 0.5, keep it as is
     }
 
     private ChatResponse CreateResponse(string answer, string source, double confidence, string intent)
