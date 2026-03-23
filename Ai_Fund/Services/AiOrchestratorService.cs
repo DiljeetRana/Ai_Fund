@@ -72,14 +72,13 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 2.5. Handle greetings EARLY (before RAG)
             var lowerQuery = query.ToLower().Trim();
-            if (lowerQuery == "hi" || lowerQuery == "hello" || lowerQuery == "hey")
-            {
-                return CreateResponse("Hello! How can I help you with mutual funds today?", "Static", 1.0, "GREETING");
-            }
-            if (lowerQuery.Contains("how are you") || lowerQuery.Contains("how are u") || 
+            if (lowerQuery == "hi" || lowerQuery == "hello" || lowerQuery == "hey" ||
+                lowerQuery.Contains("how are you") || lowerQuery.Contains("how are u") || 
                 lowerQuery.Contains("how r you") || lowerQuery.Contains("how r u"))
             {
-                return CreateResponse("I'm doing great 😊 How can I help you with mutual funds today?", "Static", 1.0, "GREETING");
+                var greetingPrompt = "The user is greeting you. Respond warmly as FundAI, a smart mutual fund assistant. Keep it brief and varied.";
+                var greetingAnswer = await _llmService.AskLLMAsync(greetingPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                return CreateResponse(CleanResponse(greetingAnswer), "LLM-Dynamic", 1.0, "GREETING");
             }
 
             if (lowerQuery.Contains("who are you") || lowerQuery.Contains("who are u") || 
@@ -95,6 +94,15 @@ public class AiOrchestratorService : IAiOrchestratorService
                 identityAnswer = _personalityService.ApplyPersonality(identityAnswer);
                 
                 return CreateResponse(identityAnswer, "LLM-Dynamic", 1.0, "IDENTITY");
+            }
+
+            if (lowerQuery.Contains("bye") || lowerQuery.Contains("goodbye") || 
+                lowerQuery.Contains("thank you") || lowerQuery.Contains("thanks") ||
+                lowerQuery == "quit" || lowerQuery == "exit")
+            {
+                var closingPrompt = "The user is saying goodbye or thank you. Respond warmly as FundAI, a smart mutual fund assistant. Wish them well on their financial journey. Keep it brief and varied.";
+                var closingAnswer = await _llmService.AskLLMAsync(closingPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                return CreateResponse(CleanResponse(closingAnswer), "LLM-Dynamic", 1.0, "CLOSING");
             }
 
             // 3. Resolve follow-up queries with context
@@ -155,7 +163,9 @@ public class AiOrchestratorService : IAiOrchestratorService
             // 4. Check for opinion queries
             if (QueryNormalizer.IsOpinionQuery(query))
             {
-                return CreateResponse("I can provide general information, but I cannot give personal opinions or financial advice.", "Static", 1.0, "OPINION");
+                var opinionPrompt = "The user is asking for a personal opinion or specific recommendation. Explain that as an AI (FundAI), you can only provide factual, general information and cannot give personal opinions or financial advice. Help them focus on facts.";
+                var opinionAnswer = await _llmService.AskLLMAsync(opinionPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                return CreateResponse(CleanResponse(opinionAnswer), "LLM-Dynamic", 1.0, "OPINION");
             }
 
             // 5. Normalize query (remove opinion phrases)
@@ -172,8 +182,8 @@ public class AiOrchestratorService : IAiOrchestratorService
             _logger.LogInformation("Personal query: {IsPersonal}, Structured: {NeedsStructured}, Intent: {Intent} for: {Query}", 
                 isPersonalQuery, needsStructuredEarly, intent, originalQuery);
             
-            // 7. Handle static intents (only GREETING and CLOSING)
-            var staticResponse = HandleStaticIntent(intent);
+            // 7. Handle static intents
+            var staticResponse = HandleStaticIntent(intent, originalQuery);
             if (staticResponse != null)
             {
                 _logger.LogInformation("Returning static response for intent: {Intent}", intent);
@@ -270,7 +280,9 @@ public class AiOrchestratorService : IAiOrchestratorService
                 // Log knowledge gap - no vector results
                 await _gapService.LogGapAsync(query, intent, 0);
                 
-                return CreateResponse("I'm not sure I understand. Could you please clarify or rephrase your question? For example, you can ask about SIP, mutual funds, or investments.", "System", 0, intent);
+                var clarificationPrompt = "The user's query is unclear or unsupported. Politely ask for clarification and suggest categories like SIP returns, comparisons, or fund basics.";
+                var clarificationAnswer = await _llmService.AskLLMAsync(clarificationPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                return CreateResponse(CleanResponse(clarificationAnswer), "LLM-Dynamic", 0, intent);
             }
 
             // Check for low confidence and log gap
@@ -282,10 +294,12 @@ public class AiOrchestratorService : IAiOrchestratorService
                     await _gapService.LogGapAsync(query, intent, topMatches[0].Score);
                 }
                 
-                // If very low confidence, ask for clarification
+                // If very low confidence, ask for clarification dynamically
                 if (topMatches[0].Score < 0.3)
                 {
-                    return CreateResponse("I'm not quite sure what you're asking about. Could you provide more details? For example, are you asking about SIP, mutual funds, NAV, or something else?", "System", topMatches[0].Score, intent);
+                    var lowConfPrompt = "The user's query resulted in very low system confidence. Politely ask them to provide more details about their mutual fund or investment question.";
+                    var lowConfAnswer = await _llmService.AskLLMAsync(lowConfPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                    return CreateResponse(CleanResponse(lowConfAnswer), "LLM-Dynamic", topMatches[0].Score, intent);
                 }
             }
 
@@ -302,6 +316,14 @@ public class AiOrchestratorService : IAiOrchestratorService
             if (isPersonalQuery)
             {
                 _logger.LogInformation("Smart guidance mode for personal query: {Query}", originalQuery);
+                
+                // New Goal Planning check (HIGHEST PRIORITY in personal)
+                if (_smartGuidanceService.IsGoalQuery(originalQuery))
+                {
+                    var goalAnswer = await _smartGuidanceService.GenerateGoalPlanningAsync(originalQuery);
+                    _contextManager.SaveRichContext(userId, originalQuery, goalAnswer, topic, new List<string>());
+                    return CreateResponse(goalAnswer, "SmartGuidance-Goal", 1.0, "GOAL");
+                }
                 
                 // Check for returns query first
                 if (_smartGuidanceService.IsReturnsQuery(originalQuery))
@@ -574,7 +596,7 @@ public class AiOrchestratorService : IAiOrchestratorService
             _contextManager.SaveRichContext(userId, originalQuery, aiResponse, topic, extractedEntities);
 
             // 12. Apply guardrails
-            var guardedResponse = ApplyGuardrails(aiResponse);
+            var guardedResponse = await ApplyGuardrailsDynamic(aiResponse, originalQuery);
             if (guardedResponse != null)
             {
                 _logger.LogWarning("Guardrail triggered for query: {Query}", query);
@@ -620,16 +642,16 @@ public class AiOrchestratorService : IAiOrchestratorService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing query: {Query}", query);
-            return CreateResponse("An error occurred while processing your request.", "Error", 0, "ERROR");
+            return CreateResponse("I'm having a bit of trouble processing that right now. Could you please try again in a moment? I'm always here to help with your mutual fund questions!", "Error", 0, "ERROR");
         }
     }
 
-    private ChatResponse? HandleStaticIntent(string intent)
+    private ChatResponse? HandleStaticIntent(string intent, string originalQuery)
     {
         return intent switch
         {
-            "GREETING" => CreateResponse("Hello! I can help you with mutual fund queries.", "Static", 1.0, intent),
-            "CLOSING" => CreateResponse("Thank you for using our service. Have a great day!", "Static", 1.0, intent),
+            "GREETING" => null, // Handled dynamically in main pipeline
+            "CLOSING" => null, // Will be handled dynamically later or falls through
             _ => null
         };
     }
@@ -680,14 +702,16 @@ public class AiOrchestratorService : IAiOrchestratorService
                 .Distinct());
     }
 
-    private ChatResponse? ApplyGuardrails(string aiResponse)
+    private async Task<ChatResponse?> ApplyGuardrailsDynamic(string aiResponse, string query)
     {
         // Only block if the response contains dangerous guarantees
         if (aiResponse.Contains("guaranteed returns", StringComparison.OrdinalIgnoreCase) ||
             aiResponse.Contains("fixed guaranteed return", StringComparison.OrdinalIgnoreCase) ||
             aiResponse.Contains("100% guaranteed", StringComparison.OrdinalIgnoreCase))
         {
-            return CreateResponse("Mutual funds are subject to market risk. No returns are guaranteed.", "SafetyFilter", 0, "BLOCKED");
+            var safetyPrompt = "The user is asking about guaranteed returns. Rephrase this safety warning naturally: 'Mutual funds are subject to market risk. No returns are 100% guaranteed.'";
+            var safetyAnswer = await _llmService.AskLLMAsync(safetyPrompt, query, new List<ChatMessage>(), false, false, "");
+            return CreateResponse(CleanResponse(safetyAnswer), "SafetyFilter-Dynamic", 0, "BLOCKED");
         }
 
         // Only block if giving specific personal investment commands with amounts
@@ -695,7 +719,9 @@ public class AiOrchestratorService : IAiOrchestratorService
              aiResponse.Contains("you should definitely invest", StringComparison.OrdinalIgnoreCase)) &&
             (aiResponse.Contains("₹") || aiResponse.Contains("$")))
         {
-            return CreateResponse("I can provide general information, but not specific financial advice.", "SafetyFilter", 0, "BLOCKED");
+            var advicePrompt = "The user is asking for specific financial advice. Rephrase this disclaimer naturally: 'I can provide general information and guidance, but I cannot give specific personal financial advice.'";
+            var adviceAnswer = await _llmService.AskLLMAsync(advicePrompt, query, new List<ChatMessage>(), false, false, "");
+            return CreateResponse(CleanResponse(adviceAnswer), "SafetyFilter-Dynamic", 0, "BLOCKED");
         }
         
         // Don't block general informational content about best/top funds

@@ -17,6 +17,8 @@ public interface ISmartGuidanceService
     Task<string> GenerateFDReturnsAsync(int amount, int years);
     Task<string> GenerateUniversalReturnsAsync(string investmentType, int amount, int years);
     Task<string> CompareInvestmentsAsync(string type1, string type2, int amount, int years);
+    bool IsGoalQuery(string query);
+    Task<string> GenerateGoalPlanningAsync(string query);
 }
 
 public class SmartGuidanceService : ISmartGuidanceService
@@ -58,6 +60,21 @@ public class SmartGuidanceService : ISmartGuidanceService
     {
         query = query.ToLower().Replace(",", "");
         
+        // Handle "$X" or "X dollars"
+        var dollarMatch = Regex.Match(query, @"(?:\$|dollars?)\s*(\d+(\.\d+)?)(?:\s*(k|thousand|lakh|crore|cr))?");
+        if (dollarMatch.Success)
+        {
+            double val = double.Parse(dollarMatch.Groups[1].Value);
+            string multiplier = dollarMatch.Groups[3].Value.ToLower();
+            
+            if (multiplier == "k" || multiplier == "thousand") val *= 1000;
+            if (multiplier == "lakh") val *= 100000;
+            if (multiplier == "crore" || multiplier == "cr") val *= 10000000;
+            
+            // Convert to INR for internal logic (approx rate 83.5)
+            return (int)(val * 83.5);
+        }
+
         // Handle "X lakh"
         var lakhMatch = Regex.Match(query, @"(\d+(\.\d+)?)\s*lakh");
         if (lakhMatch.Success)
@@ -351,6 +368,46 @@ CRITICAL INSTRUCTIONS:
 - Do NOT introduce yourself. Just provide the answer.
 - Focus on the total amount: ₹{amount:N0}.
 ";
+        return await _llmService.GenerateStructuredAsync(prompt);
+    }
+
+    public bool IsGoalQuery(string query)
+    {
+        query = query.ToLower();
+        return query.Contains("reach") || 
+               query.Contains("target") || 
+               query.Contains("goal") ||
+               query.Contains("how long") ||
+               query.Contains("how many years") ||
+               (query.Contains("save") && query.Contains("to get"));
+    }
+
+    public async Task<string> GenerateGoalPlanningAsync(string query)
+    {
+        var prompt = $@"
+You are Miria, a smart and helpful financial assistant.
+The user is asking a goal-planning question about reaching a target amount.
+
+User Question: {query}
+
+TASK:
+1. Extract the 'Target Amount' (the goal) and the 'Saving Amount' (SIP).
+2. Use an estimated 10-12% annual return for mutual funds (SIP).
+3. If currencies are mixed (e.g., saving in ₹ for a $ target), use a current approximate exchange rate of 1 USD = ₹83.5.
+4. Calculate (roughly) the number of years required. 
+   - Formula hint: FV = P * [((1 + r)^n - 1) / r]. Solve for n.
+5. Provide a step-by-step conversational explanation.
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
+- Mention your assumptions (return rate and exchange rate) clearly.
+- Include a small table showing the growth at key milestones (e.g., after 5, 10, 15 years) if relevant.
+- End with a motivating practical tip.
+
+Answer:";
+
         return await _llmService.GenerateStructuredAsync(prompt);
     }
 
