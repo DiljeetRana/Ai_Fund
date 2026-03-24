@@ -114,6 +114,15 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse(CleanResponse(closingAnswer), "LLM-Dynamic", 1.0, "CLOSING");
             }
 
+            if (lowerQuery.Contains("usd") || lowerQuery.Contains("exchange rate") || 
+                (lowerQuery.Contains("rate") && lowerQuery.Contains("usa")))
+            {
+                var rate = await _currencyService.GetUsdToInrRateAsync();
+                var currencyPrompt = $"The user is asking about currency exchange rates. I have the live information that 1 USD is currently approx ₹{rate:F1}. Respond helpfully and mention this live rate.";
+                var currencyAnswer = await _llmService.AskLLMAsync(currencyPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                return CreateResponse(CleanResponse(currencyAnswer), "Live-Currency", 1.0, "CURRENCY");
+            }
+
             // 3. Resolve follow-up queries with context
             var isExpansion = _expansionService.IsExpansionQuery(query);
             var isComparison = _comparisonService.IsComparisonQuery(query);

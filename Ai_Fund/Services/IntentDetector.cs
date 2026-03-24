@@ -15,6 +15,11 @@ public static class IntentDetector
         if (query.Contains("nav") || query.Contains("latest price") || query.Contains("current price") || 
             (query.Contains("how") && query.Contains("doing") && (query.Contains("fund") || query.Contains("scheme"))))
             return "MF_SPECIFIC";
+        
+        // 0.6. CURRENCY (high priority)
+        if (query.Contains("exchange rate") || query.Contains("usd rate") || query.Contains("dollar rate") || 
+            (query.Contains("rate") && (query.Contains("usa") || query.Contains("us ") || query.Contains("dollar"))))
+            return "CURRENCY";
 
         // 1. COMPARISON (high priority)
         if (query.Contains("difference") || query.Contains("diff") || query.Contains(" vs ") || 
