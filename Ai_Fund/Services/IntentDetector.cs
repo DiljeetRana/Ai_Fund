@@ -10,6 +10,11 @@ public static class IntentDetector
         if (query.Contains("how are you") || query.Contains("how are u") || 
             query.Contains("how r you") || query.Contains("how r u"))
             return "GREETING";
+        
+        // 0.5. MF_SPECIFIC (high priority)
+        if (query.Contains("nav") || query.Contains("latest price") || query.Contains("current price") || 
+            (query.Contains("how") && query.Contains("doing") && (query.Contains("fund") || query.Contains("scheme"))))
+            return "MF_SPECIFIC";
 
         // 1. COMPARISON (high priority)
         if (query.Contains("difference") || query.Contains("diff") || query.Contains(" vs ") || 

@@ -10,13 +10,15 @@ public class MutualFundService : IMutualFundService
     private readonly IMutualFundRepository _repository;
     private readonly IEmbeddingService _embeddingService;
     private readonly ILLMService _llmService;
+    private readonly IMfApiService _mfApiService;
     private static List<ChatMessage> _chatHistory = new List<ChatMessage>();
 
-    public MutualFundService(IMutualFundRepository repository, IEmbeddingService embeddingService, ILLMService llmService)
+    public MutualFundService(IMutualFundRepository repository, IEmbeddingService embeddingService, ILLMService llmService, IMfApiService mfApiService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
         _llmService = llmService;
+        _mfApiService = mfApiService;
     }
 
     public async Task<string> GetAnswerAsync(string query)
@@ -158,6 +160,22 @@ public class MutualFundService : IMutualFundService
                 .Select(x => x.Data.Answer)
                 .Distinct());
 
+        // Live Data Lookup (MFAPI)
+        string liveDataContext = "";
+        if (intent == "MF_SPECIFIC" || (query.Split(' ').Length > 3 && query.ToLower().Contains("fund")))
+        {
+            var mfSearch = await _mfApiService.SearchSchemesAsync(query);
+            if (mfSearch != null && mfSearch.Any())
+            {
+                var bestScheme = mfSearch.First();
+                var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
+                if (latestNav != null)
+                {
+                    liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
+                }
+            }
+        }
+
         // For simple definitions, return direct answer
         if (intent == "DEFINITION" && topMatches.Count > 0 && topMatches[0].Score > 0.8)
         {
@@ -178,7 +196,7 @@ public class MutualFundService : IMutualFundService
         }
 
         // Generate AI response using LLM with chat history
-        var aiResponse = await _llmService.AskLLMAsync(context, query, _chatHistory);
+        var aiResponse = await _llmService.AskLLMAsync(context + liveDataContext, query, _chatHistory);
 
         // Enhanced safety filter
         if (aiResponse.Contains("guarantee", StringComparison.OrdinalIgnoreCase) || 

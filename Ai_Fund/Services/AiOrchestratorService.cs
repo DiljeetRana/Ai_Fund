@@ -22,6 +22,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly IStructuredAnswerService _structuredAnswerService;
     private readonly ISmartGuidanceService _smartGuidanceService;
     private readonly IQdrantService _qdrantService;
+    private readonly IMfApiService _mfApiService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -37,7 +38,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         IComparisonService comparisonService,
         IStructuredAnswerService structuredAnswerService,
         ISmartGuidanceService smartGuidanceService,
-        IQdrantService qdrantService)
+        IQdrantService qdrantService,
+        IMfApiService mfApiService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -53,6 +55,7 @@ public class AiOrchestratorService : IAiOrchestratorService
         _structuredAnswerService = structuredAnswerService;
         _smartGuidanceService = smartGuidanceService;
         _qdrantService = qdrantService;
+        _mfApiService = mfApiService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -192,6 +195,23 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse(CleanResponse(clarification), "LLM-Dynamic", 0, intent);
             }
 
+            // 9.5. Live Data Lookup (MFAPI) - If intent is MF_SPECIFIC or query looks like a fund name
+            string liveDataContext = "";
+            if (intent == "MF_SPECIFIC" || query.Split(' ').Length > 3) // Basic heuristic for fund name
+            {
+                var mfSearch = await _mfApiService.SearchSchemesAsync(query);
+                if (mfSearch != null && mfSearch.Any())
+                {
+                    var bestScheme = mfSearch.First();
+                    var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
+                    if (latestNav != null)
+                    {
+                        liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
+                        _logger.LogInformation("Added live data to context: {LiveData}", liveDataContext);
+                    }
+                }
+            }
+
             var topic = ExtractTopic(query);
             var richContext = _contextManager.GetRichContext(userId);
 
@@ -231,7 +251,7 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
 
             // 11. Final RAG+LLM Pipeline
-            var context = BuildContext(topMatches);
+            var context = BuildContext(topMatches) + liveDataContext;
             var aiResponse = await _llmService.AskLLMAsync(context, originalQuery, new List<ChatMessage>(), isPersonalQuery || needsStructuredEarly, false, topic);
             aiResponse = CleanResponse(aiResponse);
             aiResponse = _personalityService.ApplyPersonality(aiResponse);
