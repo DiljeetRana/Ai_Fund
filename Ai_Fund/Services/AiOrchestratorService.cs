@@ -124,8 +124,11 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
 
             // 3. Resolve follow-up queries with context
+            var chatHistory = _contextManager.GetRecentChatHistory(userId);
+            var existingContext = _contextManager.GetRichContext(userId);
             var isExpansion = _expansionService.IsExpansionQuery(query);
             var isComparison = _comparisonService.IsComparisonQuery(query);
+            var isFollowUp = _contextManager.IsFollowUpQuery(query);
             
             if (isComparison)
             {
@@ -265,7 +268,15 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 11. Final RAG+LLM Pipeline
             var context = BuildContext(topMatches) + liveDataContext;
-            var aiResponse = await _llmService.AskLLMAsync(context, originalQuery, new List<ChatMessage>(), isPersonalQuery || needsStructuredEarly, false, topic);
+            context = BuildConversationAwareContext(context, richContext, isFollowUp);
+
+            var aiResponse = await _llmService.AskLLMAsync(
+                context,
+                originalQuery,
+                chatHistory,
+                isPersonalQuery || needsStructuredEarly,
+                isFollowUp,
+                existingContext?.LastAnswer);
             aiResponse = CleanResponse(aiResponse);
             aiResponse = _personalityService.ApplyPersonality(aiResponse);
 
@@ -274,6 +285,9 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             var source = string.IsNullOrEmpty(liveDataContext) ? "RAG+LLM" : "Live+RAG+LLM";
             var finalResponse = CreateResponse(aiResponse, source, ScaleConfidence(topMatches.Count > 0 ? topMatches[0].Score : 0.9), intent);
+
+            var conversationEntities = ExtractConversationEntities(originalQuery, aiResponse);
+            _contextManager.SaveConversationTurn(userId, originalQuery, aiResponse, topic, intent, conversationEntities);
             
             // Save and Cache
             await _repository.SaveChatHistoryAsync(new Models.ChatHistory { UserId = userId, Role = "Assistant", Message = aiResponse, CreatedDate = DateTime.UtcNow });
@@ -308,6 +322,9 @@ public class AiOrchestratorService : IAiOrchestratorService
     private string ExtractTopic(string query)
     {
         query = query.ToLower();
+        if (query.Contains("groww") || query.Contains("et money") || query.Contains("paytm money") ||
+            query.Contains("zerodha") || query.Contains("coin") || query.Contains("app"))
+            return "Investment App";
         if (query.Contains("sip")) return "SIP";
         if (query.Contains("mutual fund")) return "Mutual Fund";
         return "Investment";
@@ -316,6 +333,46 @@ public class AiOrchestratorService : IAiOrchestratorService
     private string BuildContext(List<(KnowledgeData Data, double Score)> matches)
     {
         return string.Join("\n\n", matches.Select(m => $"Answer: {m.Data.Answer}"));
+    }
+
+    private string BuildConversationAwareContext(string context, ConversationContext? richContext, bool isFollowUp)
+    {
+        if (!isFollowUp || richContext == null)
+        {
+            return context;
+        }
+
+        var conversationContext =
+            $"\n\nRECENT CONVERSATION:\nLast user question: {richContext.LastUserQuery}\nLast assistant answer: {richContext.LastAnswer}";
+
+        if (richContext.LastEntities.Any())
+        {
+            conversationContext += $"\nReferenced entities: {string.Join(", ", richContext.LastEntities)}";
+        }
+
+        return context + conversationContext;
+    }
+
+    private List<string> ExtractConversationEntities(string userQuery, string answer)
+    {
+        var entities = new List<string>();
+        var combined = $"{userQuery} {answer}";
+        var knownApps = new[] { "Groww", "ET Money", "Paytm Money", "Coin", "Zerodha" };
+
+        foreach (var app in knownApps)
+        {
+            if (combined.Contains(app, StringComparison.OrdinalIgnoreCase))
+            {
+                entities.Add(app);
+            }
+        }
+
+        if (combined.Contains("app", StringComparison.OrdinalIgnoreCase))
+        {
+            entities.Add("App");
+        }
+
+        return entities.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private string ExtractFundName(string query)

@@ -7,6 +7,7 @@ public interface IContextManager
     bool IsFollowUpQuery(string query);
     string ResolveFollowUp(string query, string userId);
     void SaveContext(string userId, string topic, string intent, string lastQuestion);
+    void SaveConversationTurn(string userId, string userQuery, string assistantAnswer, string topic, string intent, List<string>? entities = null);
     string GetLastQuestion(string userId);
     string GetLastTopic(string userId);
     void SaveLastAnswer(string userId, string answer);
@@ -15,6 +16,7 @@ public interface IContextManager
     (string Entity1, string Entity2)? GetLastEntities(string userId);
     void SaveRichContext(string userId, string userQuery, string answer, string topic, List<string> entities);
     ConversationContext? GetRichContext(string userId);
+    List<Ai_Fund.Models.ChatMessage> GetRecentChatHistory(string userId, int maxMessages = 6);
 }
 
 public class ContextManager : IContextManager
@@ -43,6 +45,40 @@ public class ContextManager : IContextManager
             LastQuestion = lastQuestion,
             Timestamp = DateTime.UtcNow
         };
+    }
+
+    public void SaveConversationTurn(string userId, string userQuery, string assistantAnswer, string topic, string intent, List<string>? entities = null)
+    {
+        if (!_userContexts.TryGetValue(userId, out var context))
+        {
+            context = new ConversationContext();
+            _userContexts[userId] = context;
+        }
+
+        context.LastUserQuery = userQuery;
+        context.LastQuestion = userQuery;
+        context.LastAnswer = assistantAnswer;
+        context.LastTopic = topic;
+        context.LastIntent = intent;
+        context.Timestamp = DateTime.UtcNow;
+
+        if (entities != null && entities.Count > 0)
+        {
+            context.LastEntities = entities.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            context.LastEntity1 = context.LastEntities.ElementAtOrDefault(0) ?? string.Empty;
+            context.LastEntity2 = context.LastEntities.ElementAtOrDefault(1) ?? string.Empty;
+        }
+
+        context.RecentMessages.Add(new Ai_Fund.Models.ChatMessage { Role = "user", Content = userQuery });
+        context.RecentMessages.Add(new Ai_Fund.Models.ChatMessage { Role = "assistant", Content = assistantAnswer });
+
+        const int maxStoredMessages = 8;
+        if (context.RecentMessages.Count > maxStoredMessages)
+        {
+            context.RecentMessages = context.RecentMessages
+                .Skip(context.RecentMessages.Count - maxStoredMessages)
+                .ToList();
+        }
     }
 
     public string GetLastTopic(string userId)
@@ -114,16 +150,7 @@ public class ContextManager : IContextManager
 
     public void SaveRichContext(string userId, string userQuery, string answer, string topic, List<string> entities)
     {
-        _userContexts[userId] = new ConversationContext
-        {
-            LastUserQuery = userQuery,
-            LastAnswer = answer,
-            LastTopic = topic,
-            LastEntities = entities ?? new List<string>(),
-            LastEntity1 = entities?.Count > 0 ? entities[0] : string.Empty,
-            LastEntity2 = entities?.Count > 1 ? entities[1] : string.Empty,
-            Timestamp = DateTime.UtcNow
-        };
+        SaveConversationTurn(userId, userQuery, answer, topic, string.Empty, entities);
     }
 
     public ConversationContext? GetRichContext(string userId)
@@ -197,13 +224,33 @@ public class ContextManager : IContextManager
 
         var context = GetRichContext(userId);
         
-        if (context != null && !string.IsNullOrEmpty(context.LastTopic))
+        if (context != null)
         {
-            // Attach topic to vague query for better RAG retrieval
-            return $"{context.LastTopic} - {query}";
+            if (!string.IsNullOrWhiteSpace(context.LastUserQuery))
+            {
+                return $"Previous question: {context.LastUserQuery}. Previous answer: {context.LastAnswer}. Follow-up question: {query}";
+            }
+
+            if (!string.IsNullOrEmpty(context.LastTopic))
+            {
+                return $"{context.LastTopic} - {query}";
+            }
         }
         
         return query;
+    }
+
+    public List<Ai_Fund.Models.ChatMessage> GetRecentChatHistory(string userId, int maxMessages = 6)
+    {
+        var context = GetRichContext(userId);
+        if (context == null || context.RecentMessages.Count == 0)
+        {
+            return new List<Ai_Fund.Models.ChatMessage>();
+        }
+
+        return context.RecentMessages
+            .TakeLast(maxMessages)
+            .ToList();
     }
 }
 
@@ -217,5 +264,6 @@ public class ConversationContext
     public string LastQuestion { get; set; } = string.Empty;
     public string LastEntity1 { get; set; } = string.Empty;
     public string LastEntity2 { get; set; } = string.Empty;
+    public List<Ai_Fund.Models.ChatMessage> RecentMessages { get; set; } = new List<Ai_Fund.Models.ChatMessage>();
     public DateTime Timestamp { get; set; }
 }

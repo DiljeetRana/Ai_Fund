@@ -25,6 +25,9 @@ public class OllamaLLMService : ILLMService
 
         var prompt = $@"{_personalityService.GetPersonalityPrompt()}
 
+Recent Conversation:
+{historyText}
+
 Knowledge Base Context:
 {context}
 
