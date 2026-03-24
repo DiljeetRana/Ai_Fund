@@ -29,6 +29,7 @@ builder.Services.AddScoped<IStructuredAnswerService, StructuredAnswerService>();
 builder.Services.AddScoped<ISmartGuidanceService, SmartGuidanceService>();
 builder.Services.AddHttpClient<IMfApiService, MfApiService>();
 builder.Services.AddHttpClient<ICurrencyService, CurrencyService>();
+builder.Services.AddHttpClient<IMarketNewsService, MarketAuxService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();

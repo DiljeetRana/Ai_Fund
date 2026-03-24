@@ -24,6 +24,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly IQdrantService _qdrantService;
     private readonly IMfApiService _mfApiService;
     private readonly ICurrencyService _currencyService;
+    private readonly IMarketNewsService _marketNewsService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -41,7 +42,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         ISmartGuidanceService smartGuidanceService,
         IQdrantService qdrantService,
         IMfApiService mfApiService,
-        ICurrencyService currencyService)
+        ICurrencyService currencyService,
+        IMarketNewsService marketNewsService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -59,6 +61,7 @@ public class AiOrchestratorService : IAiOrchestratorService
         _qdrantService = qdrantService;
         _mfApiService = mfApiService;
         _currencyService = currencyService;
+        _marketNewsService = marketNewsService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -121,6 +124,21 @@ public class AiOrchestratorService : IAiOrchestratorService
                 var currencyPrompt = $"The user is asking about currency exchange rates. I have the live information that 1 USD is currently approx ₹{rate:F1}. Respond helpfully and mention this live rate.";
                 var currencyAnswer = await _llmService.AskLLMAsync(currencyPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
                 return CreateResponse(CleanResponse(currencyAnswer), "Live-Currency", 1.0, "CURRENCY");
+            }
+
+            if (_marketNewsService.IsLiveMarketQuery(originalQuery))
+            {
+                var liveArticles = await _marketNewsService.GetLatestMarketNewsAsync(originalQuery);
+                if (liveArticles.Any())
+                {
+                    var liveContext = _marketNewsService.BuildNewsContext(liveArticles, originalQuery);
+                    var marketPrompt = $"{liveContext}\n\nExplain briefly why the market may be falling today. Mention this is based on recent headlines and may evolve during the day.";
+                    var marketAnswer = await _llmService.AskLLMAsync(marketPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                    marketAnswer = CleanResponse(marketAnswer);
+                    marketAnswer = _personalityService.ApplyPersonality(marketAnswer);
+                    _contextManager.SaveConversationTurn(userId, originalQuery, marketAnswer, "Market News", "MARKET_LIVE", ExtractConversationEntities(originalQuery, marketAnswer));
+                    return CreateResponse(marketAnswer, "Live-Market-News", 1.0, "MARKET_LIVE");
+                }
             }
 
             // 3. Resolve follow-up queries with context
@@ -325,6 +343,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         if (query.Contains("groww") || query.Contains("et money") || query.Contains("paytm money") ||
             query.Contains("zerodha") || query.Contains("coin") || query.Contains("app"))
             return "Investment App";
+        if (query.Contains("market") || query.Contains("nifty") || query.Contains("sensex"))
+            return "Market News";
         if (query.Contains("sip")) return "SIP";
         if (query.Contains("mutual fund")) return "Mutual Fund";
         return "Investment";
@@ -357,7 +377,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     {
         var entities = new List<string>();
         var combined = $"{userQuery} {answer}";
-        var knownApps = new[] { "Groww", "ET Money", "Paytm Money", "Coin", "Zerodha" };
+        var knownApps = new[] { "Groww", "ET Money", "Paytm Money", "Coin", "Zerodha", "Nifty", "Sensex" };
 
         foreach (var app in knownApps)
         {
