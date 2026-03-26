@@ -43,6 +43,7 @@ public class AuthService : IAuthService
 
             return new AuthResponse
             {
+                UserId = user.UserId,
                 Username = user.Username,
                 Email = user.Email,
                 Token = GenerateJwtToken(user)
@@ -50,7 +51,6 @@ public class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            // Log or handle the exception as needed
             throw new Exception($"Authentication Service Error during registration: {ex.Message}", ex);
         }
     }
@@ -67,6 +67,7 @@ public class AuthService : IAuthService
 
             return new AuthResponse
             {
+                UserId = user.UserId,
                 Username = user.Username,
                 Email = user.Email,
                 Token = GenerateJwtToken(user)
@@ -91,7 +92,6 @@ public class AuthService : IAuthService
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Email, user.Email),
                 new Claim("id", user.UserId.ToString())
-
             }),
             Expires = DateTime.UtcNow.AddDays(7),
             Issuer = jwtSettings["Issuer"],

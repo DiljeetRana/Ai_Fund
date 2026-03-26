@@ -18,8 +18,9 @@ public static class IntentDetector
         
         // 0.6. CURRENCY (high priority)
         if (query.Contains("exchange rate") || query.Contains("usd rate") || query.Contains("dollar rate") || 
-            (query.Contains("rate") && (query.Contains("usa") || query.Contains("us ") || query.Contains("dollar"))))
+            (query.Contains("rate") && (query.Contains("usa") || query.Contains("us ") || query.Contains("dollar") || query.Contains("today") || query.Contains("now"))))
             return "CURRENCY";
+
 
         // 1. COMPARISON (high priority)
         if (query.Contains("difference") || query.Contains("diff") || query.Contains(" vs ") || 

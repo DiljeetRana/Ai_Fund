@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://ai-fund.onrender.com';
+export const API_BASE = import.meta.env.VITE_API_URL || 'https://ai-fund.onrender.com';
+
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,

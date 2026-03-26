@@ -117,8 +117,8 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse(CleanResponse(closingAnswer), "LLM-Dynamic", 1.0, "CLOSING");
             }
 
-            if (lowerQuery.Contains("usd") || lowerQuery.Contains("exchange rate") || 
-                (lowerQuery.Contains("rate") && lowerQuery.Contains("usa")))
+            if (intent == "CURRENCY")
+
             {
                 var rate = await _currencyService.GetUsdToInrRateAsync();
                 var currencyPrompt = $"The user is asking about currency exchange rates. I have the live information that 1 USD is currently approx ₹{rate:F1}. Respond helpfully and mention this live rate.";

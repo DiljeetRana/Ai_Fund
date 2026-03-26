@@ -20,7 +20,8 @@ public class MutualFundController : ControllerBase
     [HttpGet("ask")]
     public async Task<IActionResult> Ask([FromQuery] string query)
     {
-        var userId = User.FindFirst(ClaimTypes.Name)?.Value ?? "guest";
+        var userId = User.FindFirst("id")?.Value ?? User.FindFirst(ClaimTypes.Name)?.Value ?? "guest";
+
         var response = await _aiService.ProcessQueryAsync(query, userId);
         return Ok(response);
     }

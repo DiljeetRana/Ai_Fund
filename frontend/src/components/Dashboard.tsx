@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://localhost:44328';
 
 interface DashboardStats {
   totalQueries: number;
