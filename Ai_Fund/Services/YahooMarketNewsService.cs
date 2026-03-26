@@ -5,11 +5,15 @@ namespace Ai_Fund.Services;
 
 public class YahooMarketNewsService : IMarketNewsService
 {
+    private readonly HttpClient _httpClient;
     private readonly ILogger<YahooMarketNewsService> _logger;
 
-    public YahooMarketNewsService(ILogger<YahooMarketNewsService> logger)
+    public YahooMarketNewsService(HttpClient httpClient, ILogger<YahooMarketNewsService> logger)
     {
+        _httpClient = httpClient;
         _logger = logger;
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36");
     }
 
     public bool IsLiveMarketQuery(string query)
@@ -22,12 +26,9 @@ public class YahooMarketNewsService : IMarketNewsService
     {
         try
         {
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36");
-            
             // Search for Nifty/Sensex news specifically for the AI context
             var url = $"https://query2.finance.yahoo.com/v1/finance/search?q=Nifty%20Sensex%20Market&newsCount=3";
-            var result = await client.GetFromJsonAsync<YahooSearchResponse>(url);
+            var result = await _httpClient.GetFromJsonAsync<YahooSearchResponse>(url);
 
             if (result?.News != null)
             {

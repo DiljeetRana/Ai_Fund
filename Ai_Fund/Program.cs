@@ -108,15 +108,11 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Enable CORS early to handle all requests
+app.UseCors("AllowAll");
+
 // Configure the HTTP request pipeline.
 app.MapOpenApi();
-app.UseSwagger();
-app.UseSwaggerUI();
-
-// Note: HTTPS redirection removed — Render handles SSL termination at the edge
-
-// Use CORS
-app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
