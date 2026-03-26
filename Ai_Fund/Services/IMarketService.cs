@@ -4,4 +4,6 @@ public interface IMarketService
 {
     Task<object> GetMarketOverviewAsync();
     Task<object> FetchLiveIndexAsync(string symbol);
+    Task<List<double?>> GetIndexChartAsync(string symbol, string range);
 }
+

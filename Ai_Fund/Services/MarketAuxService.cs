@@ -8,8 +8,10 @@ public interface IMarketNewsService
 {
     bool IsLiveMarketQuery(string query);
     Task<List<MarketAuxArticle>> GetLatestMarketNewsAsync(string query);
+    Task<List<MarketAuxArticle>> GetFinancialNewsAsync();
     string BuildNewsContext(List<MarketAuxArticle> articles, string userQuery);
 }
+
 
 public class MarketAuxService : IMarketNewsService
 {
@@ -198,4 +200,35 @@ public class MarketAuxService : IMarketNewsService
 
         return articles;
     }
+
+    public async Task<List<MarketAuxArticle>> GetFinancialNewsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_apiToken)) return new List<MarketAuxArticle>();
+
+        try
+        {
+            var parameters = new Dictionary<string, string?>
+            {
+                ["api_token"] = _apiToken,
+                ["language"] = "en",
+                ["limit"] = "3",
+                ["search"] = "Nifty Sensex Indian Stock Market",
+                ["published_after"] = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-ddTHH:mm")
+            };
+
+            var countries = _configuration["MarketAux:Countries"];
+            if (!string.IsNullOrWhiteSpace(countries)) parameters["countries"] = countries;
+
+            var url = QueryHelpers.AddQueryString("/v1/news/all", parameters!);
+            var response = await _httpClient.GetFromJsonAsync<MarketAuxResponse>(url);
+            
+            return response?.Data?.Take(3).ToList() ?? new List<MarketAuxArticle>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching general financial news");
+            return new List<MarketAuxArticle>();
+        }
+    }
 }
+
