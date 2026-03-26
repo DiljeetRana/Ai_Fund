@@ -108,7 +108,13 @@ Provide an accurate, helpful answer based on the context above.";
         try
         {
             var response = await _httpClient.PostAsJsonAsync("https://api.groq.com/openai/v1/chat/completions", request);
-            response.EnsureSuccessStatusCode();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Groq API Error. Status: {Status}, Body: {Body}", response.StatusCode, errorBody);
+                return $"I'm having trouble connecting to the AI service. (Groq API Error: {response.StatusCode})";
+            }
 
             var json = await response.Content.ReadFromJsonAsync<JsonElement>();
             var content = json.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
@@ -118,7 +124,8 @@ Provide an accurate, helpful answer based on the context above.";
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error calling Groq API");
-            return "I'm having trouble connecting to the AI service. Please try again.";
+            return $"I'm having trouble connecting to the AI service. (Exception: {ex.Message})";
         }
+
     }
 }
