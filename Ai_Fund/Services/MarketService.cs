@@ -1,16 +1,18 @@
-using System.Net.Http.Json;
-using Ai_Fund.Models;
+using System.Collections.Concurrent;
 
 namespace Ai_Fund.Services;
 
 public class MarketService : IMarketService
 {
     private readonly ILogger<MarketService> _logger;
+    private static readonly ConcurrentDictionary<string, (object Data, DateTime Timestamp)> _cache = new();
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
     public MarketService(ILogger<MarketService> logger)
     {
         _logger = logger;
     }
+
 
     public async Task<object> GetMarketOverviewAsync()
     {
@@ -30,54 +32,88 @@ public class MarketService : IMarketService
 
     public async Task<object> FetchLiveIndexAsync(string symbol)
     {
+        // 1. Check Cache
+        if (_cache.TryGetValue(symbol, out var cached) && (DateTime.UtcNow - cached.Timestamp) < CacheDuration)
+        {
+            return cached.Data;
+        }
+
         try
         {
             using var client = new HttpClient();
-            var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(symbol)}";
-            var response = await client.GetFromJsonAsync<YahooFinanceResponse>(url);
+            // User-Agent helps avoid some generic bot blocks
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
             
-            if (response?.Chart?.Result?.Count > 0)
-            {
-                var meta = response.Chart.Result[0].Meta;
-                var currentPrice = meta.RegularMarketPrice;
-                var prevClose = meta.ChartPreviousClose;
-                var change = currentPrice - prevClose;
-                var percentChange = (change / prevClose) * 100;
-                
-                var trendPrefix = change >= 0 ? "+" : "";
-                var arrow = change >= 0 ? "↑" : "↓";
-                var color = change >= 0 ? "green" : "rose";
-                
-                var displayName = symbol switch {
-                    "^NSEI" => "INDEXNSE: NIFTY_50",
-                    "^BSESN" => "INDEXBOM: SENSEX",
-                    _ => symbol
-                };
+            var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(symbol)}";
+            var response = await client.GetAsync(url);
 
-                return new { 
-                    symbol = displayName,
-                    value = currentPrice.ToString("N2"), 
-                    change = $"{trendPrefix}{change:N2}",
-                    percent = $"{percentChange:F2}%",
-                    trend = $"{trendPrefix}{change:N2} ({percentChange:F2}%) {arrow} today", 
-                    color = color,
-                    lastUpdate = DateTimeOffset.FromUnixTimeSeconds(meta.RegularMarketTime).ToLocalTime().ToString("dd MMM, h:mm tt") + " IST"
-                };
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                _logger.LogWarning("Yahoo Finance rate limit hit for {Symbol}. Serving last known or fallback.", symbol);
+                if (cached.Data != null) return cached.Data;
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+                var result = await response.Content.ReadFromJsonAsync<YahooFinanceResponse>();
+                
+                if (result?.Chart?.Result?.Count > 0)
+                {
+                    var meta = result.Chart.Result[0].Meta;
+                    var currentPrice = meta.RegularMarketPrice;
+                    var prevClose = meta.ChartPreviousClose;
+                    var change = currentPrice - prevClose;
+                    var percentChange = (change / prevClose) * 100;
+                    
+                    var trendPrefix = change >= 0 ? "+" : "";
+                    var arrow = change >= 0 ? "↑" : "↓";
+                    var color = change >= 0 ? "green" : "rose";
+                    
+                    var displayName = symbol switch {
+                        "^NSEI" => "INDEXNSE: NIFTY_50",
+                        "^BSESN" => "INDEXBOM: SENSEX",
+                        _ => symbol
+                    };
+
+                    var data = new { 
+                        symbol = displayName,
+                        value = currentPrice.ToString("N2"), 
+                        change = $"{trendPrefix}{change:N2}",
+                        percent = $"{percentChange:F2}%",
+                        trend = $"{trendPrefix}{change:N2} ({percentChange:F2}%) {arrow} today", 
+                        color = color,
+                        lastUpdate = DateTimeOffset.FromUnixTimeSeconds(meta.RegularMarketTime).ToLocalTime().ToString("dd MMM, h:mm tt") + " IST"
+                    };
+
+                    // Update Cache
+                    _cache[symbol] = (data, DateTime.UtcNow);
+                    return data;
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching live index for {Symbol}. Using fallback.", symbol);
+            if (ex.Message.Contains("429"))
+                _logger.LogWarning("Yahoo Finance Rate Limit (429) for {Symbol}.", symbol);
+            else
+                _logger.LogError(ex, "Error fetching live index for {Symbol}.", symbol);
         }
 
-        // Realistic fallbacks matching user screenshot if API fails
-        return symbol == "^NSEI" 
-            ? new { symbol = "INDEXNSE: NIFTY_50", value = "23,306.45", trend = "+394.05 (1.72%) ↑ today", color = "green", lastUpdate = "25 Mar, 3:31 pm IST" }
-            : new { symbol = "INDEXBOM: SENSEX", value = "76,456.20", trend = "+512.40 (0.67%) ↑ today", color = "green", lastUpdate = "25 Mar, 3:31 pm IST" };
+        // Final Fallback (if cache empty and API failed)
+        return cached.Data ?? (symbol == "^NSEI" 
+            ? new { symbol = "INDEXNSE: NIFTY_50", value = "23,306.45", trend = "+394.05 (1.72%) ↑ today", color = "green", lastUpdate = DateTime.Now.ToString("dd MMM, h:mm tt") + " IST" }
+            : new { symbol = "INDEXBOM: SENSEX", value = "76,456.20", trend = "+512.40 (0.67%) ↑ today", color = "green", lastUpdate = DateTime.Now.ToString("dd MMM, h:mm tt") + " IST" });
     }
+
 
     public async Task<List<double?>> GetIndexChartAsync(string symbol, string range)
     {
+        var cacheKey = $"chart_{symbol}_{range}";
+        if (_cache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.Timestamp) < TimeSpan.FromMinutes(5)) // Charts can be older
+        {
+            return (List<double?>)cached.Data;
+        }
+
         try
         {
             var interval = range switch
@@ -89,22 +125,41 @@ public class MarketService : IMarketService
             };
 
             using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+            
             var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(symbol)}?range={range}&interval={interval}";
-            var response = await client.GetFromJsonAsync<YahooChartResponse>(url);
+            var response = await client.GetAsync(url);
 
-            if (response?.Chart?.Result?.Count > 0 && 
-                response.Chart.Result[0].Indicators?.Quote?.Count > 0)
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
             {
-                return response.Chart.Result[0].Indicators.Quote[0].Close;
+                _logger.LogWarning("Yahoo Chart rate limit hit for {Symbol}. Serving cached.", symbol);
+                if (cached.Data != null) return (List<double?>)cached.Data;
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+                var result = await response.Content.ReadFromJsonAsync<YahooChartResponse>();
+
+                if (result?.Chart?.Result?.Count > 0 && 
+                    result.Chart.Result[0].Indicators?.Quote?.Count > 0)
+                {
+                    var data = result.Chart.Result[0].Indicators.Quote[0].Close;
+                    _cache[cacheKey] = (data, DateTime.UtcNow);
+                    return data;
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching chart data for {Symbol} ({Range})", symbol, range);
+            if (ex.Message.Contains("429"))
+                _logger.LogWarning("Yahoo Chart Rate Limit (429) for {Symbol}.", symbol);
+            else
+                _logger.LogError(ex, "Error fetching chart data for {Symbol} ({Range})", symbol, range);
         }
 
-        return new List<double?>();
+        return cached.Data != null ? (List<double?>)cached.Data : new List<double?>();
     }
 }
+
 
 

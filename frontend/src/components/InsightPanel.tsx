@@ -249,7 +249,7 @@ const InsightPanel: React.FC = () => {
     const interval = setInterval(() => {
       fetchMarketData();
       fetchNews();
-    }, 30000); // News updates every 30s
+    }, 60000); // 1 minute refresh to avoid API rate limits
     return () => clearInterval(interval);
   }, [fetchMarketData, fetchNews]);
 
