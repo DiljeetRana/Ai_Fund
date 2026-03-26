@@ -14,7 +14,7 @@ function MainApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const chatAreaRef = useRef<HTMLDivElement>(null);
-  const { logout } = useAuth();
+
 
 
   useEffect(() => {
