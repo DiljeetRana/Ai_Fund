@@ -29,4 +29,15 @@ CREATE INDEX IX_ChatHistory_UserId ON ChatHistory(UserId);
 CREATE INDEX IX_ChatHistory_CreatedDate ON ChatHistory(CreatedDate);
 CREATE INDEX IX_AiLog_UserId ON AiLog(UserId);
 CREATE INDEX IX_AiLog_CreatedDate ON AiLog(CreatedDate);
-CREATE INDEX IX_MutualFundKnowledge_IsActive ON MutualFundKnowledge(IsActive);
+-- Create Users table for authentication
+CREATE TABLE Users (
+    Id INT PRIMARY KEY IDENTITY(1,1),
+    Username NVARCHAR(100) UNIQUE NOT NULL,
+    PasswordHash NVARCHAR(MAX) NOT NULL,
+    Email NVARCHAR(255),
+    CreatedAt DATETIME DEFAULT GETDATE()
+);
+
+-- Create index for performance
+CREATE INDEX IX_Users_Username ON Users(Username);
+

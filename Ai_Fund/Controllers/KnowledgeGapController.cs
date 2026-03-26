@@ -4,12 +4,16 @@ using Ai_Fund.Data.Interfaces;
 using Ai_Fund.Services.Embedding;
 using System.Text.Json;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace Ai_Fund.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class KnowledgeGapController : ControllerBase
 {
+
     private readonly IKnowledgeGapService _gapService;
     private readonly IMutualFundRepository _repository;
     private readonly IEmbeddingService _embeddingService;
