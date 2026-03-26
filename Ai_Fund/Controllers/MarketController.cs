@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Ai_Fund.Services;
+using Ai_Fund.Models;
 using Microsoft.AspNetCore.Authorization;
+using System.Net.Http.Json;
+
 
 namespace Ai_Fund.Controllers;
 
@@ -25,26 +28,14 @@ public class MarketController : ControllerBase
         try
         {
             var usdRate = await _currencyService.GetUsdToInrRateAsync();
-            _logger.LogInformation("USD Rate fetched: {Rate}", usdRate);
-
             
-            // For NIFTY/SENSEX, we use reasonable base values with small random jitter 
-            // to simulate "live" movement if no real-time key is available.
-            // 22,453.80 (+0.45%)
-            // 73,903.15 (+0.38%)
-            
-            var random = new Random();
-            var niftyBase = 22453.80;
-            var sensexBase = 73903.15;
-            
-            // Add slight jitter (±0.05%)
-            var jitter = (random.NextDouble() * 2 - 1) * 0.0005;
-            var nifty = niftyBase * (1 + jitter);
-            var sensex = sensexBase * (1 + jitter);
+            // Fetch Live Indices from the newly provided free API
+            var niftyData = await FetchLiveIndexAsync("^NSEI");
+            var sensexData = await FetchLiveIndexAsync("^BSESN");
 
             return Ok(new {
-                nifty = new { value = nifty.ToString("N2"), trend = "+0.45%", color = "green" },
-                sensex = new { value = sensex.ToString("N2"), trend = "+0.38%", color = "green" },
+                nifty = niftyData,
+                sensex = sensexData,
                 usdInr = new { value = "₹" + usdRate.ToString("N2"), trend = "-0.02%", color = "rose" }
             });
         }
@@ -54,4 +45,37 @@ public class MarketController : ControllerBase
             return StatusCode(500, "Internal server error");
         }
     }
+
+    private async Task<object> FetchLiveIndexAsync(string symbol)
+    {
+        try
+        {
+            using var client = new HttpClient();
+            var url = $"https://military-jobye-haiqstudios-14f59639.koyeb.app/stock?symbol={Uri.EscapeDataString(symbol)}&res=num";
+            var response = await client.GetFromJsonAsync<MarketApiResponse>(url);
+            
+            if (response?.Status == "success" && response.Data != null)
+            {
+                var d = response.Data;
+                var trendPrefix = d.PercentChange >= 0 ? "+" : "";
+                var color = d.PercentChange >= 0 ? "green" : "rose";
+                
+                return new { 
+                    value = d.LastPrice.ToString("N2"), 
+                    trend = $"{trendPrefix}{d.PercentChange:F2}%", 
+                    color = color 
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching live index for {Symbol}. Using fallback.", symbol);
+        }
+
+        // Reasonable Fallbacks if API fails
+        return symbol == "^NSEI" 
+            ? new { value = "24,250.35", trend = "+0.52%", color = "green" }
+            : new { value = "79,486.20", trend = "+0.41%", color = "green" };
+    }
 }
+
