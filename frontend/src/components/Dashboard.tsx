@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import api, { API_BASE } from '../services/api';
+import api from '../services/api';
+
 
 
 interface DashboardStats {
