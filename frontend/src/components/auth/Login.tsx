@@ -83,7 +83,7 @@ const Login: React.FC = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className={`w-full bg-bg-secondary/30 border rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 transition-all font-semibold text-text-primary placeholder:text-text-muted/30 ${
+                className={`w-full bg-bg-secondary/30 border rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 transition-all font-semibold text-gray-900 dark:text-white placeholder:text-text-muted/30 ${
                   error 
                     ? 'border-rose-500/50 focus:ring-rose-500/10 bg-rose-500/5' 
                     : 'border-border-primary focus:ring-indigo-500/10 focus:border-indigo-500'
@@ -109,7 +109,7 @@ const Login: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`w-full bg-bg-secondary/30 border rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 transition-all font-semibold text-text-primary placeholder:text-text-muted/30 ${
+                className={`w-full bg-bg-secondary/30 border rounded-xl py-4 pl-12 pr-4 focus:outline-none focus:ring-4 transition-all font-semibold text-gray-900 dark:text-white placeholder:text-text-muted/30 ${
                   error 
                     ? 'border-rose-500/50 focus:ring-rose-500/10 bg-rose-500/5' 
                     : 'border-border-primary focus:ring-indigo-500/10 focus:border-indigo-500'
