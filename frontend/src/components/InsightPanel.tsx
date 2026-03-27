@@ -371,30 +371,10 @@ const InsightPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="mt-auto pt-8">
-        <motion.div 
-          whileHover={{ y: -4 }}
-          className="p-6 rounded-[2.5rem] bg-gradient-to-br from-indigo-600 via-indigo-600 to-emerald-600 text-white shadow-2xl shadow-indigo-500/30 relative overflow-hidden group border border-white/10"
-        >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-12 -mt-12 blur-3xl group-hover:bg-white/30 transition-all duration-500" />
-          
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-1.5 rounded-lg bg-white/20 backdrop-blur-md">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-              </div>
-              <h4 className="text-sm font-black tracking-tight">Portfolio Alpha</h4>
-            </div>
-            <p className="text-[10px] opacity-80 leading-relaxed mb-4 font-medium max-w-[180px]">
-              Deploy advanced AI risk nodes to shield your capital from volatility.
-            </p>
-            <button className="px-5 py-2.5 bg-white text-indigo-700 rounded-xl font-black text-xs hover:shadow-2xl transition-all hover:scale-105 active:scale-95">
-              Activate Nodes
-            </button>
-          </div>
-        </motion.div>
+      <div className="mt-auto pt-8 flex flex-col items-center">
+        <p className="text-[9px] text-text-muted font-bold tracking-[0.25em] opacity-40 uppercase">
+          Precision Engineering • FundAI v1.0
+        </p>
       </div>
     </aside>
   );

@@ -12,26 +12,9 @@ const EmptyState: React.FC = () => {
       <p className="text-text-secondary text-lg mb-10 max-w-lg leading-relaxed font-medium">
         I'm your intelligent investment companion. Ask me anything about mutual funds, SIP strategies, or market trends.
       </p>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
-        <SuggestionPill label="Best SIP for 5 years?" />
-        <SuggestionPill label="Compare FD vs Mutual Funds" />
-        <SuggestionPill label="What is current NIFTY rate?" />
-        <SuggestionPill label="Explain Tax Saving Funds" />
-      </div>
     </div>
   );
 };
 
-const SuggestionPill: React.FC<{ label: string }> = ({ label }) => (
-  <button className="px-5 py-4 rounded-2xl bg-bg-secondary border border-border-primary text-sm font-bold text-text-secondary hover:border-indigo-500/30 hover:text-indigo-500 hover:bg-indigo-500/5 transition-all duration-300 text-left flex items-center justify-between group">
-    {label}
-    <span className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-2 group-hover:translate-x-0">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
-      </svg>
-    </span>
-  </button>
-);
 
 export default EmptyState;
