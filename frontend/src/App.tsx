@@ -1,9 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login from './components/auth/Login';
-import Register from './components/auth/Register';
-import MainApp from './MainApp';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
+// ... (imports remain the same)
 
 function App() {
   return (
