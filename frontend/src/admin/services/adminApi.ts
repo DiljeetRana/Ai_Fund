@@ -9,7 +9,10 @@ import {
   TrendingQuery,
 } from '../types/admin.types';
 
-const API_BASE_URL = 'https://localhost:44328/api';
+const API_BASE_URL = `${
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? 'https://localhost:44328' : 'https://ai-fund.onrender.com')
+}/api`;
 
 class AdminApiService {
   private api: AxiosInstance;
