@@ -8,7 +8,7 @@ public interface IMarketService
     Task<object> GetMarketOverviewAsync();
     Task<object> FetchLiveIndexAsync(string symbol);
     Task<List<double?>> GetIndexChartAsync(string symbol, string range);
-    Task<object> GetYahooNewsAsync(string query);
+    Task<object> GetLatestNewsAsync(string query);
 }
 
 

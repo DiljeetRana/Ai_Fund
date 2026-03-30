@@ -12,13 +12,18 @@ public class MarketService : IMarketService
 {
     private readonly ILogger<MarketService> _logger;
     private readonly ICurrencyService _currencyService;
+    private readonly IMarketNewsService _marketNewsService;
     private static readonly ConcurrentDictionary<string, (object Data, DateTime Timestamp)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-    public MarketService(ILogger<MarketService> logger, ICurrencyService currencyService)
+    public MarketService(
+        ILogger<MarketService> logger,
+        ICurrencyService currencyService,
+        IMarketNewsService marketNewsService)
     {
         _logger = logger;
         _currencyService = currencyService;
+        _marketNewsService = marketNewsService;
     }
 
 
@@ -169,7 +174,7 @@ public class MarketService : IMarketService
         return cached.Data != null ? (List<double?>)cached.Data : new List<double?>();
     }
 
-    public async Task<object> GetYahooNewsAsync(string query)
+    public async Task<object> GetLatestNewsAsync(string query)
     {
         var cacheKey = $"news_{query}";
         if (_cache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.Timestamp) < TimeSpan.FromMinutes(10))
@@ -179,31 +184,25 @@ public class MarketService : IMarketService
 
         try
         {
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36");
-            
-            var url = $"https://query2.finance.yahoo.com/v1/finance/search?q={Uri.EscapeDataString(query)}&newsCount=4";
-            var result = await client.GetFromJsonAsync<YahooSearchResponse>(url);
-
-            if (result?.News != null)
+            var articles = await _marketNewsService.GetLatestMarketNewsAsync(query);
+            var payload = articles.Select(article => new
             {
-                var articles = result.News.Select(n => new {
-                    uuid = n.Uuid,
-                    title = n.Title,
-                    description = "", // Yahoo search news often doesn't have deep snippets in this response
-                    url = n.Link,
-                    source = n.Publisher,
-                    published_at = DateTimeOffset.FromUnixTimeSeconds(n.ProviderPublishTime).ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                    image_url = n.Thumbnail?.Resolutions?.FirstOrDefault()?.Url ?? ""
-                }).ToList();
+                uuid = article.Uuid,
+                title = article.Title,
+                description = article.Description,
+                url = article.Url,
+                source = article.Source,
+                published_at = article.PublishedAt,
+                image_url = article.ImageUrl,
+                provider = article.Provider
+            }).ToList();
 
-                _cache[cacheKey] = (articles, DateTime.UtcNow);
-                return articles;
-            }
+            _cache[cacheKey] = (payload, DateTime.UtcNow);
+            return payload;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching Yahoo News for {Query}", query);
+            _logger.LogError(ex, "Error fetching market news for {Query}", query);
         }
 
         return new List<object>();

@@ -42,9 +42,9 @@ public class MarketController : ControllerBase
     }
 
     [HttpGet("news")]
-    public async Task<IActionResult> GetNews()
+    public async Task<IActionResult> GetNews([FromQuery] string query = "market news")
     {
-        var news = await _marketService.GetYahooNewsAsync("Nifty 50 News");
+        var news = await _marketService.GetLatestNewsAsync(query);
         return Ok(news);
     }
 }

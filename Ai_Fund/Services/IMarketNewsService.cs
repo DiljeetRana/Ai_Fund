@@ -15,4 +15,6 @@ public class YahooArticle
     public string Url { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
+    public string PublishedAt { get; set; } = string.Empty;
+    public string Provider { get; set; } = string.Empty;
 }
