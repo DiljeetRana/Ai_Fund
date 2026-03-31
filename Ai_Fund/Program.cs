@@ -113,6 +113,11 @@ app.UseCors("AllowAll");
 
 // Configure the HTTP request pipeline.
 app.MapOpenApi();
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "AI Fund API v1");
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
